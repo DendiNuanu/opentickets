@@ -74,7 +74,7 @@ export default function Home() {
           imageUrl = publicUrl;
         }
 
-        const { error: insertError } = await supabase
+        const { data: ticketData, error: insertError } = await supabase
           .from('tickets')
           .insert([
             {
@@ -86,9 +86,20 @@ export default function Home() {
               priority: 'MEDIUM',
               image_url: imageUrl || null
             }
-          ]);
+          ])
+          .select()
+          .single();
 
         if (insertError) throw insertError;
+
+        // Create a notification for the new ticket
+        if (ticketData) {
+          await supabase.from('notifications').insert([{
+            ticket_id: ticketData.id,
+            title: 'New Ticket Received',
+            content: `Subject: ${ticketData.title}`,
+          }]);
+        }
       }
 
       setStep(3);

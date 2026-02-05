@@ -29,33 +29,16 @@ export default function Dashboard() {
         fetchTickets();
         fetchNotifications();
 
-        // Subscription for new tickets to auto-create notifications
-        const channel = supabase
-            .channel('public:tickets')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, async (payload) => {
-                const newTicket = payload.new as TicketType;
+        // Subscription for new notifications
+        const notificationChannel = supabase
+            .channel('public:notifications')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, async (payload) => {
+                const newNotif = payload.new as NotificationType;
 
-                // Create a local notification state update
-                const newNotification: NotificationType = {
-                    id: Math.random().toString(36).substring(7),
-                    ticket_id: newTicket.id,
-                    title: 'New Ticket Received',
-                    content: `Subject: ${newTicket.title}`,
-                    is_read: false,
-                    created_at: new Date().toISOString()
-                };
-
-                setNotifications(prev => [newNotification, ...prev]);
+                setNotifications(prev => [newNotif, ...prev]);
                 setUnreadCount(prev => prev + 1);
 
-                // Also insert into database for persistence
-                await supabase.from('notifications').insert([{
-                    ticket_id: newTicket.id,
-                    title: 'New Ticket Received',
-                    content: `Subject: ${newTicket.title}`,
-                }]);
-
-                // Refresh tickets if we're on the open filter
+                // Also refresh tickets if we're on the open filter
                 if (filter === 'OPEN') {
                     fetchTickets();
                 }
@@ -63,12 +46,16 @@ export default function Dashboard() {
             .subscribe();
 
         return () => {
-            supabase.removeChannel(channel);
+            supabase.removeChannel(notificationChannel);
         };
     }, [filter]);
 
     const fetchNotifications = async () => {
         try {
+            if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) {
+                return; // Silent skip in demo mode
+            }
+
             const { data, error } = await supabase
                 .from('notifications')
                 .select('*')
