@@ -16,6 +16,15 @@ export interface Ticket {
     image_url?: string; // Attached image URL
 }
 
+export interface Notification {
+    id: string;
+    ticket_id: string;
+    title: string;
+    content: string;
+    is_read: boolean;
+    created_at: string;
+}
+
 export const MOCK_TICKETS: Ticket[] = [
     {
         id: '1',

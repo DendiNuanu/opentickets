@@ -73,3 +73,24 @@ create policy "Anyone can insert messages." on messages
 
 create policy "Anyone can update own messages." on messages
   for update using (true);
+
+-- Create a table for notifications
+create table if not exists notifications (
+  id uuid default uuid_generate_v4() primary key,
+  ticket_id uuid references tickets(id) on delete cascade,
+  title text not null,
+  content text not null,
+  is_read boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table notifications enable row level security;
+
+create policy "Anyone can view notifications." on notifications
+  for select using (true);
+
+create policy "Anyone can insert notifications." on notifications
+  for insert with check (true);
+
+create policy "Anyone can update notifications." on notifications
+  for update using (true);

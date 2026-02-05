@@ -9,7 +9,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
 import { supabase } from '@/lib/supabase';
-import { type Ticket as TicketType } from '@/lib/types';
+import { type Ticket as TicketType, type Notification as NotificationType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Dashboard() {
@@ -21,10 +21,82 @@ export default function Dashboard() {
     const [updating, setUpdating] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [notifications, setNotifications] = useState<NotificationType[]>([]);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     useEffect(() => {
         fetchTickets();
+        fetchNotifications();
+
+        // Subscription for new tickets to auto-create notifications
+        const channel = supabase
+            .channel('public:tickets')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, async (payload) => {
+                const newTicket = payload.new as TicketType;
+
+                // Create a local notification state update
+                const newNotification: NotificationType = {
+                    id: Math.random().toString(36).substring(7),
+                    ticket_id: newTicket.id,
+                    title: 'New Ticket Received',
+                    content: `Subject: ${newTicket.title}`,
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                };
+
+                setNotifications(prev => [newNotification, ...prev]);
+                setUnreadCount(prev => prev + 1);
+
+                // Also insert into database for persistence
+                await supabase.from('notifications').insert([{
+                    ticket_id: newTicket.id,
+                    title: 'New Ticket Received',
+                    content: `Subject: ${newTicket.title}`,
+                }]);
+
+                // Refresh tickets if we're on the open filter
+                if (filter === 'OPEN') {
+                    fetchTickets();
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, [filter]);
+
+    const fetchNotifications = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('notifications')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(10);
+
+            if (error) throw error;
+            setNotifications(data as NotificationType[] || []);
+            setUnreadCount((data as NotificationType[])?.filter(n => !n.is_read).length || 0);
+        } catch (err) {
+            console.error('Error fetching notifications:', err);
+        }
+    };
+
+    const markAllAsRead = async () => {
+        try {
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('is_read', false);
+
+            if (error) throw error;
+            setNotifications(notifications.map(n => ({ ...n, is_read: true })));
+            setUnreadCount(0);
+        } catch (err) {
+            console.error('Error marking notifications as read:', err);
+        }
+    };
 
     // Load existing notes when ticket is selected
     useEffect(() => {
@@ -152,11 +224,104 @@ export default function Dashboard() {
                         <h1 className="h1">Dashboard</h1>
                         <p style={{ color: 'var(--text-secondary)' }}>Welcome back, Admin</p>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        <button className="icon-button" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', position: 'relative' }}>
+                        <button
+                            className="icon-button"
+                            onClick={() => setShowNotifications(!showNotifications)}
+                            style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: '50%',
+                                border: '1px solid var(--border-color)',
+                                background: 'var(--bg-secondary)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                position: 'relative'
+                            }}
+                        >
                             <Bell size={18} />
-                            <span style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, background: 'var(--error)', borderRadius: '50%' }}></span>
+                            {unreadCount > 0 && (
+                                <span style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, background: 'var(--error)', borderRadius: '50%' }}></span>
+                            )}
                         </button>
+
+                        <AnimatePresence>
+                            {showNotifications && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    style={{
+                                        position: 'absolute',
+                                        top: '100%',
+                                        right: 0,
+                                        marginTop: '0.75rem',
+                                        width: '320px',
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px solid var(--border-color)',
+                                        borderRadius: '16px',
+                                        boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+                                        zIndex: 100,
+                                        overflow: 'hidden'
+                                    }}
+                                >
+                                    <div style={{ padding: '1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <h4 style={{ fontSize: '0.9rem', fontWeight: 600 }}>Notifications</h4>
+                                        <button
+                                            onClick={markAllAsRead}
+                                            style={{ background: 'none', border: 'none', color: 'var(--accent-color)', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                                        >
+                                            Mark all as read
+                                        </button>
+                                    </div>
+                                    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                                        {notifications.length === 0 ? (
+                                            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                                                No notifications yet
+                                            </div>
+                                        ) : (
+                                            notifications.map((notif) => (
+                                                <div
+                                                    key={notif.id}
+                                                    style={{
+                                                        padding: '1rem',
+                                                        borderBottom: '1px solid var(--border-color)',
+                                                        background: notif.is_read ? 'transparent' : 'rgba(189, 147, 249, 0.05)',
+                                                        display: 'flex',
+                                                        gap: '0.75rem',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                    onClick={() => setShowNotifications(false)}
+                                                >
+                                                    <div style={{
+                                                        width: 32,
+                                                        height: 32,
+                                                        borderRadius: '50%',
+                                                        background: notif.is_read ? 'var(--bg-primary)' : 'var(--accent-color)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        flexShrink: 0
+                                                    }}>
+                                                        <Ticket size={16} color={notif.is_read ? 'var(--text-secondary)' : '#fff'} />
+                                                    </div>
+                                                    <div>
+                                                        <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.1rem' }}>{notif.title}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{notif.content}</div>
+                                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.4rem' }}>
+                                                            {new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
                         <ThemeToggle />
                     </div>
                 </div>
