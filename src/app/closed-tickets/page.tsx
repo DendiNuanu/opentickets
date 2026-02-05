@@ -11,6 +11,7 @@ import Card from '@/components/Card';
 import { supabase } from '@/lib/supabase';
 import { type Ticket as TicketType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 
 export default function ClosedTicketsPage() {
     const [tickets, setTickets] = useState<TicketType[]>([]);
@@ -20,10 +21,23 @@ export default function ClosedTicketsPage() {
     const [updating, setUpdating] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const router = useRouter();
+
+    // Check authentication
+    useEffect(() => {
+        const auth = sessionStorage.getItem('adminAuth');
+        if (!auth || auth !== 'true') {
+            router.push('/admin/login');
+        } else {
+            setIsAuthenticated(true);
+        }
+    }, [router]);
 
     useEffect(() => {
+        if (!isAuthenticated) return;
         fetchTickets();
-    }, []);
+    }, [isAuthenticated]);
 
     // Load existing notes when ticket is selected
     useEffect(() => {
@@ -35,8 +49,7 @@ export default function ClosedTicketsPage() {
     const fetchTickets = async () => {
         setLoading(true);
         try {
-            if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+            if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) {
                 console.warn("Supabase keys missing, running in demo mode");
                 setTickets([]);
             } else {
@@ -113,6 +126,34 @@ export default function ClosedTicketsPage() {
         }
     };
 
+    if (!isAuthenticated) {
+        return (
+            <div style={{
+                display: 'flex',
+                minHeight: '100vh',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--bg-primary)'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        style={{
+                            width: '40px',
+                            height: '40px',
+                            border: '4px solid var(--border-color)',
+                            borderTopColor: 'var(--accent-color)',
+                            borderRadius: '50%',
+                            margin: '0 auto 1rem'
+                        }}
+                    />
+                    <p style={{ color: 'var(--text-secondary)' }}>Checking authentication...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
             {/* Sidebar */}
@@ -135,9 +176,29 @@ export default function ClosedTicketsPage() {
                 </nav>
 
                 <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
-                    <a href="#" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
-                        <Settings size={18} /> Settings
-                    </a>
+                    <button
+                        onClick={() => {
+                            sessionStorage.removeItem('adminAuth');
+                            router.push('/admin/login');
+                        }}
+                        className="nav-item"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            color: 'var(--text-secondary)',
+                            textDecoration: 'none',
+                            background: 'none',
+                            border: 'none',
+                            width: '100%',
+                            cursor: 'pointer',
+                            fontSize: '1rem'
+                        }}
+                    >
+                        <Settings size={18} /> Logout
+                    </button>
                 </div>
             </aside>
 

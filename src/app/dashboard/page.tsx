@@ -11,8 +11,10 @@ import Card from '@/components/Card';
 import { supabase } from '@/lib/supabase';
 import { type Ticket as TicketType, type Notification as NotificationType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
+    const router = useRouter();
     const [filter, setFilter] = useState<'OPEN' | 'CLOSED'>('OPEN');
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
@@ -24,8 +26,20 @@ export default function Dashboard() {
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+    // Check authentication
+    useEffect(() => {
+        const auth = sessionStorage.getItem('adminAuth');
+        if (!auth || auth !== 'true') {
+            router.push('/admin/login');
+        } else {
+            setIsAuthenticated(true);
+        }
+    }, [router]);
 
     useEffect(() => {
+        if (!isAuthenticated) return;
         fetchTickets();
         fetchNotifications();
 
@@ -48,7 +62,7 @@ export default function Dashboard() {
         return () => {
             supabase.removeChannel(notificationChannel);
         };
-    }, [filter]);
+    }, [filter, isAuthenticated]);
 
     const fetchNotifications = async () => {
         try {
@@ -95,8 +109,7 @@ export default function Dashboard() {
     const fetchTickets = async () => {
         setLoading(true);
         try {
-            if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+            if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) {
                 console.warn("Supabase keys missing, running in demo mode");
                 setTickets([]);
             } else {
@@ -175,6 +188,35 @@ export default function Dashboard() {
         }
     };
 
+    // Show loading while checking auth
+    if (!isAuthenticated) {
+        return (
+            <div style={{
+                display: 'flex',
+                minHeight: '100vh',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--bg-primary)'
+            }}>
+                <div style={{ textAlign: 'center' }}>
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                        style={{
+                            width: '40px',
+                            height: '40px',
+                            border: '4px solid var(--border-color)',
+                            borderTopColor: 'var(--accent-color)',
+                            borderRadius: '50%',
+                            margin: '0 auto 1rem'
+                        }}
+                    />
+                    <p style={{ color: 'var(--text-secondary)' }}>Checking authentication...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
             {/* Sidebar */}
@@ -197,9 +239,29 @@ export default function Dashboard() {
                 </nav>
 
                 <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
-                    <a href="#" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
-                        <Settings size={18} /> Settings
-                    </a>
+                    <button
+                        onClick={() => {
+                            sessionStorage.removeItem('adminAuth');
+                            router.push('/admin/login');
+                        }}
+                        className="nav-item"
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '8px',
+                            color: 'var(--text-secondary)',
+                            textDecoration: 'none',
+                            background: 'none',
+                            border: 'none',
+                            width: '100%',
+                            cursor: 'pointer',
+                            fontSize: '1rem'
+                        }}
+                    >
+                        <Settings size={18} /> Logout
+                    </button>
                 </div>
             </aside>
 
