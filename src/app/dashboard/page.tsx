@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import {
     Home, Ticket, CheckCircle, Search,
-    Settings, Bell, Menu, Plus, X, Clock, AlertCircle, XCircle as XCircleIcon, MessageSquare
+    Settings, Bell, Menu, Plus, X, Clock, AlertCircle, XCircle as XCircleIcon, MessageSquare,
+    Edit, Trash2
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import Button from '@/components/Button';
@@ -15,7 +16,7 @@ import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
     const router = useRouter();
-    const [filter, setFilter] = useState<'OPEN' | 'CLOSED'>('OPEN');
+    const [filter, setFilter] = useState<'OPEN' | 'CLOSED' | 'USERS'>('OPEN');
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
@@ -26,16 +27,55 @@ export default function Dashboard() {
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
     const [showNotifications, setShowNotifications] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [users, setUsers] = useState<any[]>([]);
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
+    const [showAddUserModal, setShowAddUserModal] = useState(false);
+    const [newUserData, setNewUserData] = useState({
+        email: '',
+        password: '',
+        fullName: '',
+        username: '',
+        role: 'USER'
+    });
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [userProfile, setUserProfile] = useState<{ full_name: string; role: string; id: string } | null>(null);
+    const [editingUser, setEditingUser] = useState<any>(null);
+    const [showEditUserModal, setShowEditUserModal] = useState(false);
+    const [confirmDeleteModal, setConfirmDeleteModal] = useState<{ show: boolean; userId: string; userName: string }>({
+        show: false,
+        userId: '',
+        userName: ''
+    });
 
-    // Check authentication
+    // Check authentication and fetch profile
     useEffect(() => {
-        const auth = sessionStorage.getItem('adminAuth');
-        if (!auth || auth !== 'true') {
-            router.push('/admin/login');
-        } else {
+        const checkAuth = async () => {
+            const auth = sessionStorage.getItem('adminAuth');
+            if (!auth || auth !== 'true') {
+                router.push('/admin/login');
+                return;
+            }
+
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.push('/admin/login');
+                return;
+            }
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('id, full_name, role')
+                .eq('id', user.id)
+                .single();
+
+            if (profile) {
+                setUserProfile(profile);
+            }
             setIsAuthenticated(true);
-        }
+        };
+
+        checkAuth();
     }, [router]);
 
     useEffect(() => {
@@ -62,7 +102,7 @@ export default function Dashboard() {
         return () => {
             supabase.removeChannel(notificationChannel);
         };
-    }, [filter, isAuthenticated]);
+    }, [filter, isAuthenticated, userProfile]);
 
     const fetchNotifications = async () => {
         try {
@@ -99,12 +139,159 @@ export default function Dashboard() {
         }
     };
 
-    // Load existing notes when ticket is selected
     useEffect(() => {
         if (selectedTicket) {
             setAdminNotes(selectedTicket.admin_notes || '');
+            fetchComments(selectedTicket.id);
         }
     }, [selectedTicket]);
+
+    const fetchComments = async (ticketId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('messages')
+                .select(`
+                    *,
+                    profiles:user_id (full_name, role)
+                `)
+                .eq('ticket_id', ticketId)
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+            setComments(data || []);
+        } catch (err) {
+            console.error('Error fetching comments:', err);
+        }
+    };
+
+    const addComment = async () => {
+        if (!commentText.trim() || !selectedTicket) return;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from('messages')
+                .insert([{
+                    ticket_id: selectedTicket.id,
+                    content: commentText.trim(),
+                    user_id: user?.id
+                }]);
+
+            if (error) throw error;
+            setCommentText('');
+            fetchComments(selectedTicket.id);
+        } catch (err) {
+            console.error('Error adding comment:', err);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*');
+            if (error) throw error;
+            setUsers(data || []);
+        } catch (err) {
+            console.error('Error fetching users:', err);
+        }
+    };
+
+    const handleCreateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setUpdating(true);
+        try {
+            // 1. Sign up the user in Supabase Auth
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: newUserData.email,
+                password: newUserData.password,
+            });
+
+            if (authError) throw authError;
+            if (!authData.user) throw new Error('Failed to create user');
+
+            // 2. Insert the profile record
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert([{
+                    id: authData.user.id,
+                    full_name: newUserData.fullName,
+                    username: newUserData.username,
+                    role: newUserData.role,
+                    updated_at: new Date().toISOString()
+                }]);
+
+            if (profileError) throw profileError;
+
+            setToast({ message: 'User created successfully!', type: 'success' });
+            setShowAddUserModal(false);
+            setNewUserData({ email: '', password: '', fullName: '', username: '', role: 'USER' });
+            fetchUsers();
+        } catch (err: any) {
+            console.error('Error creating user:', err);
+            setToast({ message: err.message || 'Failed to create user', type: 'error' });
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleUpdateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUser) return;
+        setUpdating(true);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: editingUser.full_name,
+                    role: editingUser.role,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', editingUser.id);
+
+            if (error) throw error;
+
+            setToast({ message: 'User updated successfully!', type: 'success' });
+            setShowEditUserModal(false);
+            setEditingUser(null);
+            fetchUsers();
+        } catch (err: any) {
+            console.error('Error updating user:', err);
+            setToast({ message: err.message || 'Failed to update user', type: 'error' });
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handleDeleteUser = async (userId: string) => {
+        setUpdating(true);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', userId);
+
+            if (error) throw error;
+
+            setToast({ message: 'User deleted successfully!', type: 'success' });
+            setConfirmDeleteModal({ show: false, userId: '', userName: '' });
+            fetchUsers();
+        } catch (err: any) {
+            console.error('Error deleting user:', err);
+            setToast({ message: err.message || 'Failed to delete user', type: 'error' });
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    useEffect(() => {
+        if (filter === 'USERS') {
+            if (userProfile?.role === 'ADMIN') {
+                fetchUsers();
+            } else if (userProfile) {
+                setFilter('OPEN');
+            }
+        }
+    }, [filter, userProfile]);
 
     const fetchTickets = async () => {
         setLoading(true);
@@ -115,11 +302,17 @@ export default function Dashboard() {
             } else {
                 const statusFilter = filter === 'OPEN' ? ['OPEN', 'IN_PROGRESS'] : ['CLOSED', 'RESOLVED'];
 
-                const { data, error } = await supabase
+                let query = supabase
                     .from('tickets')
                     .select('*')
-                    .in('status', statusFilter)
-                    .order('created_at', { ascending: false });
+                    .in('status', statusFilter);
+
+                // Role-based filtering: Users only see their own tickets
+                if (userProfile?.role === 'USER') {
+                    query = query.eq('driver_id', userProfile.id);
+                }
+
+                const { data, error } = await query.order('created_at', { ascending: false });
 
                 if (error) throw error;
                 setTickets(data as TicketType[] || []);
@@ -236,6 +429,11 @@ export default function Dashboard() {
                     <a href="/closed-tickets" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
                         <CheckCircle size={18} /> Closed Tickets
                     </a>
+                    {userProfile?.role === 'ADMIN' && (
+                        <button onClick={() => setFilter('USERS')} className={`nav-item ${filter === 'USERS' ? 'active' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none', background: 'none', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left' }}>
+                            <Plus size={18} /> User Management
+                        </button>
+                    )}
                 </nav>
 
                 <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
@@ -271,7 +469,10 @@ export default function Dashboard() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
                     <div>
                         <h1 className="h1">Dashboard</h1>
-                        <p style={{ color: 'var(--text-secondary)' }}>Welcome back, Admin</p>
+                        <p style={{ color: 'var(--text-secondary)' }}>Welcome back, {userProfile?.full_name || 'Admin'}</p>
+                        {!userProfile && isAuthenticated && (
+                            <p style={{ color: 'var(--error)', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Profile not found. Please run the SQL fix.</p>
+                        )}
                     </div>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', position: 'relative' }}>
                         <button
@@ -405,19 +606,162 @@ export default function Dashboard() {
                     >
                         History
                     </button>
+                    {userProfile?.role === 'ADMIN' && (
+                        <button
+                            onClick={() => setFilter('USERS')}
+                            style={{
+                                padding: '0.75rem 1.5rem',
+                                background: 'none',
+                                border: 'none',
+                                borderBottom: filter === 'USERS' ? '2px solid var(--accent-color)' : '2px solid transparent',
+                                color: filter === 'USERS' ? 'var(--accent-color)' : 'var(--text-secondary)',
+                                fontWeight: filter === 'USERS' ? 600 : 400,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Users
+                        </button>
+                    )}
                 </div>
 
-                {/* Ticket List */}
+                {/* Ticket List or User List */}
                 <div style={{ marginBottom: '2rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 className="h3">{filter === 'OPEN' ? 'Active Tickets' : 'Ticket History'} ({tickets.length})</h3>
-                        <Button variant="primary" size="sm" onClick={() => window.location.href = '/'}>
-                            <Plus size={16} style={{ marginRight: 8 }} /> New Ticket
-                        </Button>
+                        <h3 className="h3">
+                            {filter === 'OPEN' ? 'Active Tickets' : filter === 'CLOSED' ? 'Ticket History' : 'User Management'}
+                            ({filter === 'USERS' ? users.length : tickets.length})
+                        </h3>
+                        {filter !== 'USERS' && (
+                            <motion.button
+                                whileHover={{ scale: 1.05, y: -2, boxShadow: '0 10px 20px rgba(109, 40, 217, 0.2)' }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => window.location.href = '/'}
+                                style={{
+                                    padding: '0.6rem 1.25rem',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    background: 'var(--accent-color)',
+                                    color: '#fff',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    fontSize: '0.875rem'
+                                }}
+                            >
+                                <Plus size={18} /> New Ticket
+                            </motion.button>
+                        )}
+                        {filter === 'USERS' && (
+                            <motion.button
+                                whileHover={{ scale: 1.05, y: -2, boxShadow: '0 10px 20px rgba(109, 40, 217, 0.2)' }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setShowAddUserModal(true)}
+                                style={{
+                                    padding: '0.6rem 1.25rem',
+                                    borderRadius: '12px',
+                                    border: 'none',
+                                    background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                                    color: '#fff',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    fontSize: '0.875rem'
+                                }}
+                            >
+                                <Plus size={18} /> Add Member
+                            </motion.button>
+                        )}
                     </div>
 
-                    {loading ? (
-                        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading tickets...</div>
+                    {loading && filter !== 'USERS' ? (
+                        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
+                    ) : filter === 'USERS' ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                            {users.map(user => (
+                                <motion.div
+                                    key={user.id}
+                                    layout
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(109, 40, 217, 0.15)' }}
+                                    style={{ height: '100%' }}
+                                >
+                                    <Card style={{
+                                        height: '100%',
+                                        padding: '1.25rem',
+                                        background: 'rgba(255, 255, 255, 0.02)',
+                                        backdropFilter: 'blur(10px)',
+                                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                                        transition: 'all 0.3s ease'
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                                                <div style={{
+                                                    width: 56,
+                                                    height: 56,
+                                                    borderRadius: '16px',
+                                                    background: 'linear-gradient(135deg, rgba(109, 40, 217, 0.2) 0%, rgba(168, 85, 247, 0.2) 100%)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '1.5rem',
+                                                    fontWeight: 700,
+                                                    color: 'var(--accent-color)',
+                                                    boxShadow: 'inset 0 0 10px rgba(109, 40, 217, 0.1)'
+                                                }}>
+                                                    {user.full_name?.charAt(0) || user.username?.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{user.full_name || user.username}</div>
+                                                    <div style={{
+                                                        fontSize: '0.75rem',
+                                                        color: user.role === 'ADMIN' ? 'var(--accent-color)' : 'var(--text-secondary)',
+                                                        fontWeight: 700,
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.05em',
+                                                        marginTop: '0.25rem',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.4rem'
+                                                    }}>
+                                                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: user.role === 'ADMIN' ? 'var(--accent-color)' : '#6272a4' }}></div>
+                                                        {user.role || 'USER'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1, background: 'rgba(109, 40, 217, 0.1)' }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    onClick={() => {
+                                                        setEditingUser({ ...user });
+                                                        setShowEditUserModal(true);
+                                                    }}
+                                                    style={{ width: 38, height: 38, borderRadius: '10px', border: '1px solid rgba(109, 40, 217, 0.2)', background: 'transparent', color: 'var(--accent-color)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
+                                                    title="Edit User"
+                                                >
+                                                    <Edit size={16} />
+                                                </motion.button>
+                                                <motion.button
+                                                    whileHover={{ scale: 1.1, background: 'rgba(239, 68, 68, 0.1)' }}
+                                                    whileTap={{ scale: 0.9 }}
+                                                    onClick={() => setConfirmDeleteModal({ show: true, userId: user.id, userName: user.full_name || user.username })}
+                                                    style={{ width: 38, height: 38, borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'transparent', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
+                                                    title="Delete User"
+                                                    disabled={user.id === userProfile?.id}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </motion.button>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                </motion.div>
+                            ))}
+                        </div>
                     ) : tickets.length === 0 ? (
                         <Card>
                             <div style={{ textAlign: 'center', padding: '4rem 2rem' }}>
@@ -432,43 +776,58 @@ export default function Dashboard() {
                             </div>
                         </Card>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
                             {tickets.map(ticket => (
-                                <div
+                                <motion.div
                                     key={ticket.id}
+                                    whileHover={{ y: -8, transition: { duration: 0.3 } }}
                                     onClick={() => setSelectedTicket(ticket)}
-                                    style={{ cursor: 'pointer' }}
+                                    style={{ cursor: 'pointer', height: '100%' }}
                                 >
-                                    <Card className="hover-card">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <div>
-                                                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                                    <span className={`badge badge-${ticket.priority?.toLowerCase() || 'medium'}`}>{ticket.priority || 'MEDIUM'}</span>
-                                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>#{ticket.id.substring(0, 8)} • {ticket.topic}</span>
+                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                        <Card style={{
+                                            height: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            padding: '1.5rem',
+                                            transition: 'box-shadow 0.3s ease',
+                                            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+                                            border: '1px solid var(--border-color)'
+                                        }} className="premium-card">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                                    <span className={`badge badge-${ticket.priority?.toLowerCase() || 'medium'}`} style={{ padding: '0.25rem 0.75rem', borderRadius: '8px' }}>
+                                                        {ticket.priority || 'MEDIUM'}
+                                                    </span>
+                                                    <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                                                        {ticket.status}
+                                                    </div>
                                                 </div>
-                                                <h4 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem' }}>{ticket.title}</h4>
-                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{ticket.description}</p>
+                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>#{ticket.id.substring(0, 8)}</span>
                                             </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ marginBottom: '0.5rem' }}>
-                                                    {ticket.status}
-                                                </div>
-                                                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                                                    {new Date(ticket.created_at).toLocaleDateString()}
-                                                </div>
+                                            <div style={{ flex: 1 }}>
+                                                <h4 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{ticket.title}</h4>
+                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ticket.description}</p>
                                             </div>
-                                        </div>
-                                    </Card>
-                                </div>
+                                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent-color)' }}></div>
+                                                    {ticket.topic}
+                                                </div>
+                                                <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                        </Card>
+                                    </div>
+                                </motion.div>
                             ))}
                         </div>
                     )}
                 </div>
             </main>
 
-            {/* Ticket Detail Modal */}
+            {/* Premium Confirmation Modal */}
             <AnimatePresence>
-                {selectedTicket && (
+                {confirmDeleteModal.show && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -479,292 +838,253 @@ export default function Dashboard() {
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            background: 'rgba(0, 0, 0, 0.7)',
+                            background: 'rgba(0, 0, 0, 0.6)',
+                            backdropFilter: 'blur(12px)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            zIndex: 2000,
+                            padding: '2rem',
+                        }}
+                        onClick={() => setConfirmDeleteModal({ show: false, userId: '', userName: '' })}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 30, opacity: 0 }}
+                            animate={{ scale: 1, y: 0, opacity: 1 }}
+                            exit={{ scale: 0.9, y: 30, opacity: 0 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                background: 'var(--bg-secondary)',
+                                borderRadius: '28px',
+                                maxWidth: '400px',
+                                width: '100%',
+                                padding: '2.5rem',
+                                border: '1px solid rgba(239, 68, 68, 0.2)',
+                                boxShadow: '0 30px 60px -12px rgba(0, 0, 0, 0.4)',
+                                textAlign: 'center'
+                            }}
+                        >
+                            <div style={{
+                                width: '70px',
+                                height: '70px',
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                margin: '0 auto 1.5rem',
+                                color: '#ef4444'
+                            }}>
+                                <Trash2 size={32} />
+                            </div>
+                            <h3 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text-primary)' }}>Are you sure?</h3>
+                            <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem', lineHeight: 1.6 }}>
+                                You are about to delete <strong style={{ color: 'var(--text-primary)' }}>{confirmDeleteModal.userName}</strong>. This action is permanent and cannot be undone.
+                            </p>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <Button
+                                    variant="secondary"
+                                    style={{ flex: 1, padding: '0.875rem' }}
+                                    onClick={() => setConfirmDeleteModal({ show: false, userId: '', userName: '' })}
+                                >
+                                    Cancel
+                                </Button>
+                                <motion.button
+                                    whileHover={{ scale: 1.02, background: '#dc2626' }}
+                                    whileTap={{ scale: 0.98 }}
+                                    onClick={() => handleDeleteUser(confirmDeleteModal.userId)}
+                                    disabled={updating}
+                                    style={{
+                                        flex: 2,
+                                        padding: '0.875rem',
+                                        borderRadius: '12px',
+                                        border: 'none',
+                                        background: '#ef4444',
+                                        color: '#fff',
+                                        fontWeight: 700,
+                                        fontSize: '1rem',
+                                        cursor: updating ? 'not-allowed' : 'pointer',
+                                        boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.5rem'
+                                    }}
+                                >
+                                    {updating ? 'Deleting...' : 'Yes, Delete User'}
+                                </motion.button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit User Modal */}
+            <AnimatePresence>
+                {showEditUserModal && editingUser && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'rgba(0, 0, 0, 0.4)',
+                            backdropFilter: 'blur(8px)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             zIndex: 1000,
                             padding: '2rem',
                         }}
-                        onClick={() => setSelectedTicket(null)}
+                        onClick={() => {
+                            setShowEditUserModal(false);
+                            setEditingUser(null);
+                        }}
                     >
                         <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 20 }}
+                            initial={{ scale: 0.95, y: 20, opacity: 0 }}
+                            animate={{ scale: 1, y: 0, opacity: 1 }}
+                            exit={{ scale: 0.95, y: 20, opacity: 0 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                             onClick={(e) => e.stopPropagation()}
                             style={{
                                 background: 'var(--bg-secondary)',
-                                borderRadius: '16px',
-                                maxWidth: '700px',
+                                borderRadius: '24px',
+                                maxWidth: '480px',
                                 width: '100%',
-                                maxHeight: '90vh',
-                                overflow: 'auto',
+                                overflow: 'hidden',
                                 border: '1px solid var(--border-color)',
+                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
                             }}
                         >
-                            {/* Modal Header */}
-                            <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ padding: '2rem 2rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, rgba(109, 40, 217, 0.05), transparent)' }}>
                                 <div>
-                                    <h2 className="h2">Ticket Details</h2>
-                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ID: #{selectedTicket.id.substring(0, 8)}</p>
+                                    <h3 style={{ fontSize: '1.75rem', fontWeight: 800, background: 'linear-gradient(135deg, #6d28d9 0%, #a855f7 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em' }}>Edit Member</h3>
+                                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem', fontWeight: 500 }}>Refine account details and permissions</p>
                                 </div>
-                                <button
-                                    onClick={() => setSelectedTicket(null)}
+                                <motion.button
+                                    whileHover={{ rotate: 90, background: 'rgba(0,0,0,0.05)' }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => {
+                                        setShowEditUserModal(false);
+                                        setEditingUser(null);
+                                    }}
                                     style={{
-                                        width: 32,
-                                        height: 32,
-                                        borderRadius: '50%',
-                                        border: '1px solid var(--border-color)',
-                                        background: 'var(--bg-primary)',
+                                        width: 40,
+                                        height: 40,
+                                        borderRadius: '12px',
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'center',
+                                        background: 'transparent',
+                                        border: '1px solid var(--border-color)',
                                         cursor: 'pointer',
+                                        color: 'var(--text-secondary)',
+                                        transition: 'all 0.2s ease'
                                     }}
                                 >
-                                    <X size={18} />
-                                </button>
+                                    <X size={20} />
+                                </motion.button>
                             </div>
 
-                            {/* Modal Body */}
-                            <div style={{ padding: '1.5rem' }}>
-                                {/* Ticket Info */}
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                                        <span className={`badge badge-${selectedTicket.priority?.toLowerCase() || 'medium'}`}>
-                                            {selectedTicket.priority || 'MEDIUM'}
-                                        </span>
-                                        <span style={{ padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(189, 147, 249, 0.2)', color: 'var(--accent-color)' }}>
-                                            {selectedTicket.topic}
-                                        </span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {getStatusIcon(selectedTicket.status)}
-                                            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{selectedTicket.status}</span>
-                                        </div>
-                                    </div>
-
-                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>{selectedTicket.title}</h3>
-                                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{selectedTicket.description}</p>
-
-                                    {selectedTicket.image_url && (
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>Attached Image</div>
-                                            <a href={selectedTicket.image_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', transition: 'transform 0.2s ease' }}>
-                                                <img
-                                                    src={selectedTicket.image_url}
-                                                    alt="Ticket attachment"
-                                                    style={{
-                                                        maxWidth: '100%',
-                                                        maxHeight: '300px',
-                                                        borderRadius: '12px',
-                                                        border: '1px solid var(--border-color)',
-                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                                        objectFit: 'contain'
-                                                    }}
-                                                />
-                                            </a>
-                                        </div>
-                                    )}
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Contact Email</div>
-                                            <div style={{ fontWeight: 600 }}>{selectedTicket.contact_email || 'N/A'}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Created</div>
-                                            <div style={{ fontWeight: 600 }}>
-                                                {new Date(selectedTicket.created_at).toLocaleString()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Admin Actions */}
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Admin Actions</h4>
-
-                                    {/* Status Update */}
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Status</label>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                            {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(status => (
-                                                <button
-                                                    key={status}
-                                                    onClick={() => updateTicketStatus(selectedTicket.id, status)}
-                                                    disabled={updating || selectedTicket.status === status}
-                                                    style={{
-                                                        padding: '0.5rem 1rem',
-                                                        fontSize: '0.875rem',
-                                                        fontWeight: 600,
-                                                        borderRadius: '8px',
-                                                        border: selectedTicket.status === status ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                                        background: selectedTicket.status === status ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
-                                                        color: selectedTicket.status === status ? 'var(--accent-color)' : 'var(--text-primary)',
-                                                        cursor: updating || selectedTicket.status === status ? 'not-allowed' : 'pointer',
-                                                        opacity: updating || selectedTicket.status === status ? 0.6 : 1,
-                                                    }}
-                                                >
-                                                    {status.replace('_', ' ')}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Priority Update */}
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Priority</label>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                            {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(priority => (
-                                                <button
-                                                    key={priority}
-                                                    onClick={() => updateTicketPriority(selectedTicket.id, priority)}
-                                                    disabled={updating || selectedTicket.priority === priority}
-                                                    style={{
-                                                        padding: '0.5rem 1rem',
-                                                        fontSize: '0.875rem',
-                                                        fontWeight: 600,
-                                                        borderRadius: '8px',
-                                                        border: selectedTicket.priority === priority ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                                        background: selectedTicket.priority === priority ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
-                                                        color: selectedTicket.priority === priority ? 'var(--accent-color)' : 'var(--text-primary)',
-                                                        cursor: updating || selectedTicket.priority === priority ? 'not-allowed' : 'pointer',
-                                                        opacity: updating || selectedTicket.priority === priority ? 0.6 : 1,
-                                                    }}
-                                                >
-                                                    {priority}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Admin Notes */}
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                                            <MessageSquare size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                                            Add Internal Note
-                                        </label>
-                                        <textarea
-                                            value={adminNotes}
-                                            onChange={(e) => setAdminNotes(e.target.value)}
-                                            placeholder="Add notes for internal tracking..."
-                                            rows={3}
-                                            style={{
-                                                width: '100%',
-                                                padding: '0.75rem',
-                                                borderRadius: '8px',
-                                                border: '1px solid var(--border-color)',
-                                                background: 'var(--bg-primary)',
-                                                color: 'var(--text-primary)',
-                                                resize: 'vertical',
-                                                fontSize: '0.875rem',
+                            <form onSubmit={handleUpdateUser} style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.1 }}
+                                >
+                                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Full Name</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={editingUser.full_name || ''}
+                                            onChange={e => setEditingUser({ ...editingUser, full_name: e.target.value })}
+                                            style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '16px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', fontSize: '1rem' }}
+                                            placeholder="Enter full name"
+                                            onFocus={e => {
+                                                e.target.style.borderColor = 'var(--accent-color)';
+                                                e.target.style.background = 'rgba(109, 40, 217, 0.02)';
+                                                e.target.style.boxShadow = '0 0 0 4px rgba(109, 40, 217, 0.1)';
+                                            }}
+                                            onBlur={e => {
+                                                e.target.style.borderColor = 'var(--border-color)';
+                                                e.target.style.background = 'rgba(255,255,255,0.03)';
+                                                e.target.style.boxShadow = 'none';
                                             }}
                                         />
                                     </div>
-                                </div>
+                                </motion.div>
 
-                                {/* Action Buttons */}
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                                    <Button variant="secondary" onClick={() => setSelectedTicket(null)}>
-                                        Close
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.2 }}
+                                >
+                                    <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 700, marginBottom: '0.6rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Account Role</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <select
+                                            value={editingUser.role || 'USER'}
+                                            onChange={e => setEditingUser({ ...editingUser, role: e.target.value })}
+                                            style={{ width: '100%', padding: '1rem 1.25rem', borderRadius: '16px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', appearance: 'none', transition: 'all 0.3s ease', fontSize: '1rem', cursor: 'pointer' }}
+                                        >
+                                            <option value="USER">User (Standard Access)</option>
+                                            <option value="ADMIN">Admin (Full Control)</option>
+                                        </select>
+                                        <div style={{ position: 'absolute', right: '1.25rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.5 }}>
+                                            <Menu size={18} />
+                                        </div>
+                                    </div>
+                                </motion.div>
+
+                                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem' }}>
+                                    <Button
+                                        variant="secondary"
+                                        type="button"
+                                        style={{ flex: 1, padding: '1rem', borderRadius: '16px', fontWeight: 600 }}
+                                        onClick={() => {
+                                            setShowEditUserModal(false);
+                                            setEditingUser(null);
+                                        }}
+                                    >
+                                        Cancel
                                     </Button>
-                                    <Button onClick={async () => {
-                                        if (!selectedTicket) return;
-
-                                        setUpdating(true);
-                                        try {
-                                            // The individual buttons already update Supabase, but let's make sure 
-                                            // the notes and any other changes are fully synced here too.
-                                            const { error } = await supabase
-                                                .from('tickets')
-                                                .update({
-                                                    admin_notes: adminNotes.trim() || null,
-                                                    status: selectedTicket.status,
-                                                    priority: selectedTicket.priority,
-                                                    updated_at: new Date().toISOString()
-                                                })
-                                                .eq('id', selectedTicket.id);
-
-                                            if (error) throw error;
-
-                                            // Re-fetch or update local list to ensure consistency
-                                            setTickets(tickets.map(t =>
-                                                t.id === selectedTicket.id
-                                                    ? { ...selectedTicket, admin_notes: adminNotes.trim() || undefined }
-                                                    : t
-                                            ));
-
-                                            // setToast({ message: 'All changes saved successfully!', type: 'success' });
-                                            // setTimeout(() => setToast(null), 3000);
-
-                                            setShowSuccess(true);
-                                            setTimeout(() => {
-                                                setShowSuccess(false);
-                                                window.location.href = '/dashboard';
-                                            }, 2000);
-                                        } catch (err) {
-                                            console.error('Error saving changes:', err);
-                                            setToast({ message: 'Failed to save changes. Check database permissions.', type: 'error' });
-                                            setTimeout(() => setToast(null), 3000);
-                                        } finally {
-                                            setUpdating(false);
-                                        }
-                                    }}>
-                                        Save Changes
-                                    </Button>
+                                    <motion.button
+                                        whileHover={{ scale: 1.02, y: -2 }}
+                                        whileTap={{ scale: 0.98 }}
+                                        type="submit"
+                                        disabled={updating}
+                                        style={{
+                                            flex: 1.5,
+                                            padding: '1rem',
+                                            borderRadius: '16px',
+                                            border: 'none',
+                                            background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                                            color: '#fff',
+                                            fontWeight: 700,
+                                            fontSize: '1rem',
+                                            cursor: updating ? 'not-allowed' : 'pointer',
+                                            boxShadow: '0 10px 20px -5px rgba(109, 40, 217, 0.3)',
+                                            transition: 'all 0.3s ease'
+                                        }}
+                                    >
+                                        {updating ? 'Updating...' : 'Update Permissions'}
+                                    </motion.button>
                                 </div>
-                            </div>
+                            </form>
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Toast Notification */}
+            {/* Add User Modal */}
             <AnimatePresence>
-                {toast && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -50, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -50, scale: 0.9 }}
-                        style={{
-                            position: 'fixed',
-                            top: '2rem',
-                            right: '2rem',
-                            zIndex: 2000,
-                            padding: '1rem 1.5rem',
-                            borderRadius: '12px',
-                            background: toast.type === 'success'
-                                ? 'linear-gradient(135deg, #50fa7b 0%, #5af78e 100%)'
-                                : 'linear-gradient(135deg, #ff5555 0%, #ff6b6b 100%)',
-                            color: '#fff',
-                            fontWeight: 600,
-                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            minWidth: '300px',
-                        }}
-                    >
-                        <div style={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: '50%',
-                            background: 'rgba(255, 255, 255, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}>
-                            {toast.type === 'success' ? '✓' : '✕'}
-                        </div>
-                        <span>{toast.message}</span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Centralized Success Popup */}
-            <AnimatePresence>
-                {showSuccess && (
+                {showAddUserModal && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -775,50 +1095,522 @@ export default function Dashboard() {
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            background: 'rgba(0, 0, 0, 0.8)',
+                            background: 'rgba(0, 0, 0, 0.4)',
+                            backdropFilter: 'blur(8px)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            zIndex: 3000,
+                            zIndex: 1000,
+                            padding: '2rem',
                         }}
+                        onClick={() => setShowAddUserModal(false)}
                     >
                         <motion.div
-                            initial={{ scale: 0.8, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.8, y: 20 }}
+                            initial={{ scale: 0.95, y: 20, opacity: 0 }}
+                            animate={{ scale: 1, y: 0, opacity: 1 }}
+                            exit={{ scale: 0.95, y: 20, opacity: 0 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                            onClick={(e) => e.stopPropagation()}
                             style={{
                                 background: 'var(--bg-secondary)',
-                                padding: '3rem',
                                 borderRadius: '24px',
-                                textAlign: 'center',
-                                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                                border: '1px solid var(--accent-color)',
-                                maxWidth: '400px',
-                                width: '90%',
+                                maxWidth: '480px',
+                                width: '100%',
+                                overflow: 'hidden',
+                                border: '1px solid var(--border-color)',
+                                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
                             }}
                         >
-                            <div style={{
-                                width: '80px',
-                                height: '80px',
-                                background: 'var(--success)',
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                margin: '0 auto 1.5rem',
-                                boxShadow: '0 0 20px rgba(80, 250, 123, 0.4)',
-                            }}>
-                                <CheckCircle size={48} color="#fff" />
+                            <div style={{ padding: '2rem 2rem 1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, rgba(109, 40, 217, 0.05), transparent)' }}>
+                                <div>
+                                    <h3 style={{ fontSize: '1.75rem', fontWeight: 800, background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em' }}>New Member</h3>
+                                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '0.25rem', fontWeight: 500 }}>Expand your team with a new account</p>
+                                </div>
+                                <motion.button
+                                    whileHover={{ rotate: 90, background: 'rgba(0,0,0,0.05)' }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => setShowAddUserModal(false)}
+                                    style={{
+                                        width: 40,
+                                        height: 40,
+                                        borderRadius: '12px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        background: 'transparent',
+                                        border: '1px solid var(--border-color)',
+                                        cursor: 'pointer',
+                                        color: 'var(--text-secondary)',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    <X size={20} />
+                                </motion.button>
                             </div>
-                            <h2 className="h2" style={{ marginBottom: '1rem' }}>Success!</h2>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
-                                All changes have been saved successfully.
-                                Redirecting you back...
-                            </p>
+
+                            <form onSubmit={handleCreateUser} style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
+                                    <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Full Name</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={newUserData.fullName}
+                                            onChange={e => setNewUserData({ ...newUserData, fullName: e.target.value })}
+                                            style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '14px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.2s ease' }}
+                                            placeholder="John Doe"
+                                        />
+                                    </motion.div>
+
+                                    <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Username</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            value={newUserData.username}
+                                            onChange={e => setNewUserData({ ...newUserData, username: e.target.value })}
+                                            style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '14px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.2s ease' }}
+                                            placeholder="johndoe"
+                                        />
+                                    </motion.div>
+                                </div>
+
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Email Address</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={newUserData.email}
+                                        onChange={e => setNewUserData({ ...newUserData, email: e.target.value })}
+                                        style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '14px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.2s ease' }}
+                                        placeholder="name@company.com"
+                                    />
+                                </motion.div>
+
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Secure Password</label>
+                                    <input
+                                        type="password"
+                                        required
+                                        value={newUserData.password}
+                                        onChange={e => setNewUserData({ ...newUserData, password: e.target.value })}
+                                        style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '14px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', transition: 'all 0.2s ease' }}
+                                        placeholder="Min. 6 characters"
+                                        minLength={6}
+                                    />
+                                </motion.div>
+
+                                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Assign Role</label>
+                                    <select
+                                        value={newUserData.role}
+                                        onChange={e => setNewUserData({ ...newUserData, role: e.target.value })}
+                                        style={{ width: '100%', padding: '0.875rem 1rem', borderRadius: '14px', border: '2px solid var(--border-color)', background: 'rgba(255,255,255,0.03)', color: 'var(--text-primary)', outline: 'none', appearance: 'none', transition: 'all 0.2s ease', cursor: 'pointer' }}
+                                    >
+                                        <option value="USER">User (Standard Access)</option>
+                                        <option value="ADMIN">Admin (Full Control)</option>
+                                    </select>
+                                </motion.div>
+
+                                <div style={{ marginTop: '1.5rem' }}>
+                                    <motion.button
+                                        whileHover={{ scale: 1.02, boxShadow: '0 10px 25px -5px rgba(109, 40, 217, 0.4)' }}
+                                        whileTap={{ scale: 0.98 }}
+                                        type="submit"
+                                        disabled={updating}
+                                        style={{
+                                            width: '100%',
+                                            padding: '1.125rem',
+                                            borderRadius: '16px',
+                                            border: 'none',
+                                            background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
+                                            color: '#fff',
+                                            fontWeight: 800,
+                                            fontSize: '1.125rem',
+                                            cursor: updating ? 'not-allowed' : 'pointer',
+                                            transition: 'all 0.3s ease',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.75rem'
+                                        }}
+                                    >
+                                        {updating ? <Clock size={20} className="animate-spin" /> : <Plus size={20} />}
+                                        {updating ? 'Processing...' : 'Create Account'}
+                                    </motion.button>
+                                </div>
+                            </form>
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Ticket Detail Modal */}
+            <AnimatePresence>
+                {
+                    selectedTicket && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: 'rgba(0, 0, 0, 0.7)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 1000,
+                                padding: '2rem',
+                            }}
+                            onClick={() => setSelectedTicket(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    background: 'var(--bg-secondary)',
+                                    borderRadius: '16px',
+                                    maxWidth: '700px',
+                                    width: '100%',
+                                    maxHeight: '90vh',
+                                    overflow: 'auto',
+                                    border: '1px solid var(--border-color)',
+                                }}
+                            >
+                                {/* Modal Header */}
+                                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h2 className="h2">Ticket Details</h2>
+                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ID: #{selectedTicket.id.substring(0, 8)}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedTicket(null)}
+                                        style={{
+                                            width: 32,
+                                            height: 32,
+                                            borderRadius: '50%',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-primary)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div style={{ padding: '1.5rem' }}>
+                                    {/* Ticket Info */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                            <span className={`badge badge-${selectedTicket.priority?.toLowerCase() || 'medium'}`}>
+                                                {selectedTicket.priority || 'MEDIUM'}
+                                            </span>
+                                            <span style={{ padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(189, 147, 249, 0.2)', color: 'var(--accent-color)' }}>
+                                                {selectedTicket.topic}
+                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                {getStatusIcon(selectedTicket.status)}
+                                                <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{selectedTicket.status}</span>
+                                            </div>
+                                        </div>
+
+                                        <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>{selectedTicket.title}</h3>
+                                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{selectedTicket.description}</p>
+
+                                        {selectedTicket.image_url && (
+                                            <div style={{ marginBottom: '1.5rem' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>Attached Image</div>
+                                                <a href={selectedTicket.image_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', transition: 'transform 0.2s ease' }}>
+                                                    <img
+                                                        src={selectedTicket.image_url}
+                                                        alt="Ticket attachment"
+                                                        style={{
+                                                            maxWidth: '100%',
+                                                            maxHeight: '300px',
+                                                            borderRadius: '12px',
+                                                            border: '1px solid var(--border-color)',
+                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                                            objectFit: 'contain'
+                                                        }}
+                                                    />
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Contact Email</div>
+                                                <div style={{ fontWeight: 600 }}>{selectedTicket.contact_email || 'N/A'}</div>
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Created</div>
+                                                <div style={{ fontWeight: 600 }}>
+                                                    {new Date(selectedTicket.created_at).toLocaleString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Admin Actions */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Admin Actions</h4>
+
+                                        {/* Status Update */}
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Status</label>
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(status => (
+                                                    <button
+                                                        key={status}
+                                                        onClick={() => updateTicketStatus(selectedTicket.id, status)}
+                                                        disabled={updating || selectedTicket.status === status}
+                                                        style={{
+                                                            padding: '0.5rem 1rem',
+                                                            fontSize: '0.875rem',
+                                                            fontWeight: 600,
+                                                            borderRadius: '8px',
+                                                            border: selectedTicket.status === status ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                            background: selectedTicket.status === status ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
+                                                            color: selectedTicket.status === status ? 'var(--accent-color)' : 'var(--text-primary)',
+                                                            cursor: updating || selectedTicket.status === status ? 'not-allowed' : 'pointer',
+                                                            opacity: updating || selectedTicket.status === status ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        {status.replace('_', ' ')}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Priority Update */}
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Priority</label>
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(priority => (
+                                                    <button
+                                                        key={priority}
+                                                        onClick={() => updateTicketPriority(selectedTicket.id, priority)}
+                                                        disabled={updating || selectedTicket.priority === priority}
+                                                        style={{
+                                                            padding: '0.5rem 1rem',
+                                                            fontSize: '0.875rem',
+                                                            fontWeight: 600,
+                                                            borderRadius: '8px',
+                                                            border: selectedTicket.priority === priority ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                            background: selectedTicket.priority === priority ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
+                                                            color: selectedTicket.priority === priority ? 'var(--accent-color)' : 'var(--text-primary)',
+                                                            cursor: updating || selectedTicket.priority === priority ? 'not-allowed' : 'pointer',
+                                                            opacity: updating || selectedTicket.priority === priority ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        {priority}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Comments Section */}
+                                        <div style={{ marginTop: '2rem' }}>
+                                            <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Comments</h4>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', maxHeight: '300px', overflowY: 'auto' }}>
+                                                {comments.length === 0 ? (
+                                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>No comments yet.</p>
+                                                ) : (
+                                                    comments.map(comment => (
+                                                        <div key={comment.id} style={{ padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{comment.profiles?.full_name || 'System'} <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.75rem' }}>({comment.profiles?.role || 'USER'})</span></span>
+                                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(comment.created_at).toLocaleString()}</span>
+                                                            </div>
+                                                            <p style={{ fontSize: '0.875rem' }}>{comment.content}</p>
+                                                        </div>
+                                                    ))
+                                                )}
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Write a comment..."
+                                                    value={commentText}
+                                                    onChange={e => setCommentText(e.target.value)}
+                                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
+                                                    onKeyPress={e => e.key === 'Enter' && addComment()}
+                                                />
+                                                <Button size="sm" onClick={addComment}>Send</Button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                        <Button variant="secondary" onClick={() => setSelectedTicket(null)}>
+                                            Close
+                                        </Button>
+                                        <Button onClick={async () => {
+                                            if (!selectedTicket) return;
+
+                                            setUpdating(true);
+                                            try {
+                                                // The individual buttons already update Supabase, but let's make sure 
+                                                // the notes and any other changes are fully synced here too.
+                                                const { error } = await supabase
+                                                    .from('tickets')
+                                                    .update({
+                                                        admin_notes: adminNotes.trim() || null,
+                                                        status: selectedTicket.status,
+                                                        priority: selectedTicket.priority,
+                                                        updated_at: new Date().toISOString()
+                                                    })
+                                                    .eq('id', selectedTicket.id);
+
+                                                if (error) throw error;
+
+                                                // Re-fetch or update local list to ensure consistency
+                                                setTickets(tickets.map(t =>
+                                                    t.id === selectedTicket.id
+                                                        ? { ...selectedTicket, admin_notes: adminNotes.trim() || undefined }
+                                                        : t
+                                                ));
+
+                                                // setToast({ message: 'All changes saved successfully!', type: 'success' });
+                                                // setTimeout(() => setToast(null), 3000);
+
+                                                setShowSuccess(true);
+                                                setTimeout(() => {
+                                                    setShowSuccess(false);
+                                                    window.location.href = '/dashboard';
+                                                }, 2000);
+                                            } catch (err) {
+                                                console.error('Error saving changes:', err);
+                                                setToast({ message: 'Failed to save changes. Check database permissions.', type: 'error' });
+                                                setTimeout(() => setToast(null), 3000);
+                                            } finally {
+                                                setUpdating(false);
+                                            }
+                                        }}>
+                                            Save Changes
+                                        </Button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
+
+            {/* Toast Notification */}
+            <AnimatePresence>
+                {
+                    toast && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+                            style={{
+                                position: 'fixed',
+                                top: '2rem',
+                                right: '2rem',
+                                zIndex: 2000,
+                                padding: '1rem 1.5rem',
+                                borderRadius: '12px',
+                                background: toast.type === 'success'
+                                    ? 'linear-gradient(135deg, #50fa7b 0%, #5af78e 100%)'
+                                    : 'linear-gradient(135deg, #ff5555 0%, #ff6b6b 100%)',
+                                color: '#fff',
+                                fontWeight: 600,
+                                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                minWidth: '300px',
+                            }}
+                        >
+                            <div style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: '50%',
+                                background: 'rgba(255, 255, 255, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}>
+                                {toast.type === 'success' ? '✓' : '✕'}
+                            </div>
+                            <span>{toast.message}</span>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
+
+            {/* Centralized Success Popup */}
+            <AnimatePresence>
+                {
+                    showSuccess && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: 'rgba(0, 0, 0, 0.8)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 3000,
+                            }}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.8, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.8, y: 20 }}
+                                style={{
+                                    background: 'var(--bg-secondary)',
+                                    padding: '3rem',
+                                    borderRadius: '24px',
+                                    textAlign: 'center',
+                                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                                    border: '1px solid var(--accent-color)',
+                                    maxWidth: '400px',
+                                    width: '90%',
+                                }}
+                            >
+                                <div style={{
+                                    width: '80px',
+                                    height: '80px',
+                                    background: 'var(--success)',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    margin: '0 auto 1.5rem',
+                                    boxShadow: '0 0 20px rgba(80, 250, 123, 0.4)',
+                                }}>
+                                    <CheckCircle size={48} color="#fff" />
+                                </div>
+                                <h2 className="h2" style={{ marginBottom: '1rem' }}>Success!</h2>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+                                    All changes have been saved successfully.
+                                    Redirecting you back...
+                                </p>
+                            </motion.div>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
 
             <style jsx global>{`
                 .nav-item.active {
@@ -850,7 +1642,11 @@ export default function Dashboard() {
                 .badge-medium { background: rgba(241, 250, 140, 0.2); color: var(--warning); }
                 .badge-high { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
                 .badge-critical { background: rgba(255, 85, 85, 0.2); color: var(--error); }
+                .premium-card:hover {
+                    box-shadow: 0 20px 40px rgba(109, 40, 217, 0.1) !important;
+                    border-color: rgba(109, 40, 217, 0.2) !important;
+                }
             `}</style>
-        </div>
+        </div >
     );
 }

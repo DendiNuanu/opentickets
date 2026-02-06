@@ -63,7 +63,7 @@ export default function StatusPage() {
                 <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <div style={{ width: 32, height: 32, background: 'var(--accent-color)', borderRadius: 8 }}></div>
-                        <span className="h3" style={{ fontWeight: 700 }}>Open Tickets Nuanu</span>
+                        <span className="h3" style={{ fontWeight: 700 }}>Open Tickets</span>
                     </div>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         <Button variant="secondary" size="sm" onClick={() => window.location.href = '/'}>

@@ -33,6 +33,7 @@ export default function Home() {
     subject: '',
     description: '',
     email: '',
+    phoneNumber: '',
     imageFile: null as File | null,
   });
 
@@ -82,6 +83,7 @@ export default function Home() {
               title: formData.subject,
               description: formData.description,
               contact_email: formData.email,
+              contact_phone: formData.phoneNumber,
               status: 'OPEN',
               priority: 'MEDIUM',
               image_url: imageUrl || null
@@ -102,7 +104,7 @@ export default function Home() {
         }
       }
 
-      setStep(3);
+      setStep(4);
     } catch (err: any) {
       console.error('Error submitting ticket:', err);
       setError(err.message || 'Failed to submit ticket');
@@ -118,7 +120,7 @@ export default function Home() {
         <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <div style={{ width: 32, height: 32, background: 'var(--accent-color)', borderRadius: 8 }}></div>
-            <span className="h3" style={{ fontWeight: 700 }}>Open Tickets Nuanu</span>
+            <span className="h3" style={{ fontWeight: 700 }}>Open Tickets</span>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <ThemeToggle />
@@ -189,9 +191,8 @@ export default function Home() {
                   <span>Back</span>
                 </motion.button>
                 <Card>
-                  <h2 className="h2" style={{ marginBottom: '1.5rem' }}>Tell us more</h2>
+                  <h2 className="h2" style={{ marginBottom: '1.5rem' }}>Contact Information</h2>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    {/* Added Email Field for Real Case */}
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Email Address</label>
                       <input
@@ -203,27 +204,97 @@ export default function Home() {
                       />
                     </div>
                     <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Phone Number</label>
+                      <input
+                        type="tel"
+                        placeholder="Your phone number"
+                        style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
+                        value={formData.phoneNumber}
+                        onChange={e => setFormData({ ...formData, phoneNumber: e.target.value })}
+                      />
+                    </div>
+                    <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Subject</label>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        <motion.button
+                          onClick={() => setFormData({ ...formData, subject: 'HT (Handy Talky)' })}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          style={{
+                            flex: 1,
+                            padding: '1rem',
+                            borderRadius: '12px',
+                            border: formData.subject === 'HT (Handy Talky)' ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                            background: formData.subject === 'HT (Handy Talky)' ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-secondary)',
+                            color: formData.subject === 'HT (Handy Talky)' ? 'var(--accent-color)' : 'var(--text-primary)',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          HT (Handy Talky)
+                        </motion.button>
+                      </div>
                       <input
                         type="text"
-                        placeholder="Brief summary of the issue"
-                        style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
-                        value={formData.subject}
+                        placeholder="Or enter other subject..."
+                        style={{ width: '100%', marginTop: '1rem', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
+                        value={formData.subject === 'HT (Handy Talky)' ? '' : formData.subject}
                         onChange={e => setFormData({ ...formData, subject: e.target.value })}
                       />
                     </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button onClick={handleNext} disabled={!formData.subject || !formData.email || !formData.phoneNumber}>
+                        Next Step <ArrowRight size={16} style={{ marginLeft: 8 }} />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            {step === 2 && (
+              <motion.div key="step2" variants={fadeIn} initial="initial" animate="animate" exit="exit">
+                <motion.button
+                  onClick={handleBack}
+                  whileHover={{ x: -5, scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.6rem 1.2rem',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: 'var(--text-primary)',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    marginBottom: '1rem',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                    transition: 'all 0.3s ease',
+                  }}
+                >
+                  <ChevronLeft size={18} />
+                  <span>Back</span>
+                </motion.button>
+                <Card>
+                  <h2 className="h2" style={{ marginBottom: '1.5rem' }}>Problem Description</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Description</label>
                       <textarea
                         rows={5}
-                        placeholder="Detailed explanation..."
+                        placeholder="Detailed explanation of the problem..."
                         style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', resize: 'vertical' }}
                         value={formData.description}
                         onChange={e => setFormData({ ...formData, description: e.target.value })}
                       />
                     </div>
 
-                    {/* Image Attachment - Optional */}
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
                         Attach Image <span style={{ color: 'var(--text-secondary)', fontWeight: 400, fontSize: '0.875rem' }}>(optional)</span>
@@ -242,14 +313,6 @@ export default function Home() {
                             background: 'var(--bg-secondary)',
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.borderColor = 'var(--accent-color)';
-                            e.currentTarget.style.background = 'rgba(189, 147, 249, 0.05)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = 'var(--border-color)';
-                            e.currentTarget.style.background = 'var(--bg-secondary)';
                           }}
                         >
                           <input
@@ -318,8 +381,8 @@ export default function Home() {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button onClick={handleNext} disabled={!formData.subject || !formData.description || !formData.email}>
-                        Next Step <ArrowRight size={16} style={{ marginLeft: 8 }} />
+                      <Button onClick={handleNext} disabled={!formData.description}>
+                        Review Request <ArrowRight size={16} style={{ marginLeft: 8 }} />
                       </Button>
                     </div>
                   </div>
@@ -327,8 +390,8 @@ export default function Home() {
               </motion.div>
             )}
 
-            {step === 2 && (
-              <motion.div key="step2" variants={fadeIn} initial="initial" animate="animate" exit="exit">
+            {step === 3 && (
+              <motion.div key="step3" variants={fadeIn} initial="initial" animate="animate" exit="exit">
                 <motion.button
                   onClick={handleBack}
                   whileHover={{ x: -5, scale: 1.05 }}
@@ -364,6 +427,10 @@ export default function Home() {
                     <div style={{ marginBottom: '1rem' }}>
                       <span className="text-label" style={{ color: 'var(--text-secondary)' }}>Email</span>
                       <div style={{ fontWeight: 600 }}>{formData.email}</div>
+                    </div>
+                    <div style={{ marginBottom: '1rem' }}>
+                      <span className="text-label" style={{ color: 'var(--text-secondary)' }}>Phone</span>
+                      <div style={{ fontWeight: 600 }}>{formData.phoneNumber}</div>
                     </div>
                     <div style={{ marginBottom: '1rem' }}>
                       <span className="text-label" style={{ color: 'var(--text-secondary)' }}>Subject</span>
@@ -430,8 +497,8 @@ export default function Home() {
               </motion.div>
             )}
 
-            {step === 3 && (
-              <motion.div key="step3" variants={fadeIn} initial="initial" animate="animate" exit="exit" style={{ textAlign: 'center' }}>
+            {step === 4 && (
+              <motion.div key="step4" variants={fadeIn} initial="initial" animate="animate" exit="exit" style={{ textAlign: 'center' }}>
                 <div style={{ marginBottom: '2rem' }}>
                   <motion.div
                     initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, damping: 10 }}
@@ -445,7 +512,7 @@ export default function Home() {
                   We have received your request and will get back to you shortly at {formData.email}.
                 </p>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                  <Button variant="secondary" onClick={() => { setStep(0); setFormData({ topic: '', subject: '', description: '', email: '', imageFile: null }); }}>
+                  <Button variant="secondary" onClick={() => { setStep(0); setFormData({ topic: '', subject: '', description: '', email: '', phoneNumber: '', imageFile: null }); }}>
                     Create Another
                   </Button>
                   <Button onClick={() => window.location.href = '/status'}>

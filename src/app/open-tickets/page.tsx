@@ -21,6 +21,8 @@ export default function OpenTicketsPage() {
     const [updating, setUpdating] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [comments, setComments] = useState<any[]>([]);
+    const [commentText, setCommentText] = useState('');
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const router = useRouter();
 
@@ -39,12 +41,52 @@ export default function OpenTicketsPage() {
         fetchTickets();
     }, [isAuthenticated]);
 
-    // Load existing notes when ticket is selected
     useEffect(() => {
         if (selectedTicket) {
             setAdminNotes(selectedTicket.admin_notes || '');
+            fetchComments(selectedTicket.id);
         }
     }, [selectedTicket]);
+
+    const fetchComments = async (ticketId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('messages')
+                .select(`
+                    *,
+                    profiles:user_id (full_name, role)
+                `)
+                .eq('ticket_id', ticketId)
+                .order('created_at', { ascending: true });
+
+            if (error) throw error;
+            setComments(data || []);
+        } catch (err) {
+            console.error('Error fetching comments:', err);
+        }
+    };
+
+    const addComment = async () => {
+        if (!commentText.trim() || !selectedTicket) return;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from('messages')
+                .insert([{
+                    ticket_id: selectedTicket.id,
+                    content: commentText.trim(),
+                    user_id: user?.id
+                }]);
+
+            if (error) throw error;
+            setCommentText('');
+            fetchComments(selectedTicket.id);
+        } catch (err) {
+            console.error('Error adding comment:', err);
+            setToast({ message: 'Failed to add comment', type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+        }
+    };
 
     const fetchTickets = async () => {
         setLoading(true);
@@ -242,33 +284,34 @@ export default function OpenTicketsPage() {
                             </div>
                         </Card>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
                             {tickets.map(ticket => (
                                 <div
                                     key={ticket.id}
                                     onClick={() => setSelectedTicket(ticket)}
                                     style={{ cursor: 'pointer' }}
                                 >
-                                    <Card className="hover-card">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <div>
-                                                <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <Card className="hover-card">
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                                                     <span className={`badge badge-${ticket.priority?.toLowerCase() || 'medium'}`}>{ticket.priority || 'MEDIUM'}</span>
-                                                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>#{ticket.id.substring(0, 8)} • {ticket.topic}</span>
+                                                    <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ fontSize: '0.65rem' }}>
+                                                        {ticket.status}
+                                                    </div>
                                                 </div>
-                                                <h4 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem' }}>{ticket.title}</h4>
-                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{ticket.description}</p>
+                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>#{ticket.id.substring(0, 8)}</span>
                                             </div>
-                                            <div style={{ textAlign: 'right' }}>
-                                                <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ marginBottom: '0.5rem' }}>
-                                                    {ticket.status}
-                                                </div>
-                                                <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-                                                    {new Date(ticket.created_at).toLocaleDateString()}
-                                                </div>
+                                            <div>
+                                                <h4 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</h4>
+                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ticket.description}</p>
                                             </div>
-                                        </div>
-                                    </Card>
+                                            <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                <span>{ticket.topic}</span>
+                                                <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                        </Card>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -450,7 +493,7 @@ export default function OpenTicketsPage() {
                                     </div>
 
                                     {/* Admin Notes */}
-                                    <div>
+                                    <div style={{ marginBottom: '1.5rem' }}>
                                         <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
                                             <MessageSquare size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
                                             Add Internal Note
@@ -471,6 +514,37 @@ export default function OpenTicketsPage() {
                                                 fontSize: '0.875rem',
                                             }}
                                         />
+                                    </div>
+
+                                    {/* Comments Section */}
+                                    <div style={{ marginTop: '2rem' }}>
+                                        <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Comments</h4>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', maxHeight: '300px', overflowY: 'auto' }}>
+                                            {comments.length === 0 ? (
+                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>No comments yet.</p>
+                                            ) : (
+                                                comments.map(comment => (
+                                                    <div key={comment.id} style={{ padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                            <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{comment.profiles?.full_name || 'System'} <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.75rem' }}>({comment.profiles?.role || 'USER'})</span></span>
+                                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(comment.created_at).toLocaleString()}</span>
+                                                        </div>
+                                                        <p style={{ fontSize: '0.875rem' }}>{comment.content}</p>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Write a comment..."
+                                                value={commentText}
+                                                onChange={e => setCommentText(e.target.value)}
+                                                style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
+                                                onKeyPress={e => e.key === 'Enter' && addComment()}
+                                            />
+                                            <Button size="sm" onClick={addComment}>Send</Button>
+                                        </div>
                                     </div>
                                 </div>
 

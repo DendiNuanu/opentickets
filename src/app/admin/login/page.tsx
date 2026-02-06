@@ -5,34 +5,73 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, LogIn, Shield, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+import { supabase } from '@/lib/supabase';
+
 export default function AdminLogin() {
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+    const [isSignUp, setIsSignUp] = useState(false);
     const router = useRouter();
+
+    React.useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setLoading(true);
 
-        // Simulate authentication delay
-        await new Promise(resolve => setTimeout(resolve, 800));
+        try {
+            if (isSignUp) {
+                const { data, error: authError } = await supabase.auth.signUp({
+                    email: email,
+                    password: password,
+                });
+                if (authError) throw authError;
 
-        if (username === 'admin' && password === 'opentickets2026') {
-            setSuccess(true);
-            // Store auth in sessionStorage
-            sessionStorage.setItem('adminAuth', 'true');
+                // Create profile record automatically
+                if (data.user) {
+                    await supabase.from('profiles').upsert([{
+                        id: data.user.id,
+                        full_name: 'Admin User',
+                        role: 'ADMIN'
+                    }]);
+                }
 
-            // Redirect after animation
-            setTimeout(() => {
-                router.push('/dashboard');
-            }, 1500);
-        } else {
-            setError('Invalid username or password');
+                setSuccess(true);
+                setError('Account created! Now log in with the same credentials.');
+                setTimeout(() => {
+                    setIsSignUp(false);
+                    setSuccess(false);
+                    setLoading(false);
+                    setError('');
+                }, 2000);
+            } else {
+                const { data, error: authError } = await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password,
+                });
+
+                if (authError) throw authError;
+
+                setSuccess(true);
+                // Store auth in sessionStorage for legacy compatibility if needed
+                sessionStorage.setItem('adminAuth', 'true');
+
+                // Redirect after animation
+                setTimeout(() => {
+                    router.push('/dashboard');
+                }, 1500);
+            }
+        } catch (err: any) {
+            console.error('Login error:', err);
+            setError(err.message || 'Invalid email or password');
             setLoading(false);
         }
     };
@@ -57,12 +96,12 @@ export default function AdminLogin() {
                 overflow: 'hidden',
                 opacity: 0.1
             }}>
-                {typeof window !== 'undefined' && [...Array(20)].map((_, i) => (
+                {isMounted && [...Array(20)].map((_, i) => (
                     <motion.div
                         key={i}
                         initial={{
-                            x: Math.random() * (window?.innerWidth || 1920),
-                            y: Math.random() * (window?.innerHeight || 1080),
+                            x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1920),
+                            y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1080),
                             scale: Math.random() * 0.5 + 0.5
                         }}
                         animate={{
@@ -157,17 +196,17 @@ export default function AdminLogin() {
                         justifyContent: 'center',
                         gap: '0.5rem'
                     }}>
-                        Admin Portal
+                        {isSignUp ? 'Create Admin' : 'Admin Portal'}
                         <Sparkles size={24} color="#667eea" />
                     </h1>
                     <p style={{ color: '#64748b', fontSize: '0.95rem' }}>
-                        Secure access to OpenTickets Dashboard
+                        {isSignUp ? 'Register a new admin account' : 'Secure access to OpenTickets Dashboard'}
                     </p>
                 </motion.div>
 
                 {/* Form */}
                 <form onSubmit={handleSubmit}>
-                    {/* Username Field */}
+                    {/* Email Field */}
                     <motion.div
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
@@ -181,7 +220,7 @@ export default function AdminLogin() {
                             color: '#334155',
                             marginBottom: '0.5rem'
                         }}>
-                            Username
+                            Email Address
                         </label>
                         <div style={{ position: 'relative' }}>
                             <User
@@ -195,10 +234,10 @@ export default function AdminLogin() {
                                 }}
                             />
                             <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Enter your username"
+                                type="email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                placeholder="Enter your email"
                                 required
                                 style={{
                                     width: '100%',
@@ -365,7 +404,7 @@ export default function AdminLogin() {
                                         borderRadius: '50%'
                                     }}
                                 />
-                                Authenticating...
+                                {isSignUp ? 'Creating...' : 'Authenticating...'}
                             </>
                         ) : success ? (
                             <>
@@ -376,15 +415,32 @@ export default function AdminLogin() {
                                 >
                                     ✓
                                 </motion.span>
-                                Success! Redirecting...
+                                {isSignUp ? 'Created!' : 'Success! Redirecting...'}
                             </>
                         ) : (
                             <>
                                 <LogIn size={20} />
-                                Sign In
+                                {isSignUp ? 'Sign Up' : 'Sign In'}
                             </>
                         )}
                     </motion.button>
+
+                    <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
+                        <button
+                            type="button"
+                            onClick={() => setIsSignUp(!isSignUp)}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#667eea',
+                                fontSize: '0.875rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                        </button>
+                    </div>
                 </form>
 
                 {/* Footer */}

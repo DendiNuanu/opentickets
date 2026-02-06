@@ -12,8 +12,29 @@ export interface Ticket {
     updated_at?: string;
     driver_id?: string; // User who created
     contact_email?: string; // For guest tickets
+    contact_phone?: string; // For guest tickets
     admin_notes?: string; // Internal admin notes
     image_url?: string; // Attached image URL
+}
+
+export interface Profile {
+    id: string;
+    username?: string;
+    full_name?: string;
+    avatar_url?: string;
+    role: 'ADMIN' | 'USER';
+}
+
+export interface Message {
+    id: string;
+    ticket_id: string;
+    user_id: string;
+    content: string;
+    created_at: string;
+    profiles?: {
+        full_name: string;
+        role: string;
+    };
 }
 
 export interface Notification {
