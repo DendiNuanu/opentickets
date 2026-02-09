@@ -291,8 +291,8 @@ export default function OpenTicketsPage() {
                             <Menu size={24} />
                         </button>
                         <div>
-                            <h1 className="h1">Open Tickets</h1>
-                            <p style={{ color: 'var(--text-secondary)' }}>Active support requests</p>
+                            <h1 className={`h1 ${styles.pageTitle}`}>Open Tickets</h1>
+                            <p className={styles.welcomeText}>Active support requests</p>
                         </div>
                     </div>
                     <div className={styles.actions}>

@@ -290,10 +290,8 @@ export default function ClosedTicketsPage() {
                         >
                             <Menu size={24} />
                         </button>
-                        <div>
-                            <h1 className="h1">Done Tickets</h1>
-                            <p style={{ color: 'var(--text-secondary)' }}>Completed support requests</p>
-                        </div>
+                        <h1 className={`h1 ${styles.pageTitle}`}>Done Tickets</h1>
+                        <p className={styles.welcomeText}>Completed support requests</p>
                     </div>
                     <div className={styles.actions}>
                         <button className="icon-button" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
