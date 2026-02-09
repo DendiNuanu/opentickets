@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Server, HelpCircle, FilePlus, Wrench,
-  ArrowRight, CheckCircle, ChevronLeft
+  Server, HelpCircle, FilePlus, Wrench, Printer,
+  ArrowRight, CheckCircle, ChevronLeft, UserCog
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import Card from '@/components/Card';
@@ -30,12 +30,16 @@ export default function Home() {
 
   const [formData, setFormData] = useState({
     topic: '',
-    subject: '',
+    subject: 'HT (Handy Talky)',
     description: '',
+    serialNumber: '',
     email: '',
     phoneNumber: '',
     imageFile: null as File | null,
   });
+
+  const [emailError, setEmailError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
 
   const topics = [
     { id: 'new-request', label: 'New Request', icon: FilePlus },
@@ -81,7 +85,7 @@ export default function Home() {
             {
               topic: topics.find(t => t.id === formData.topic)?.label || formData.topic,
               title: formData.subject,
-              description: formData.description,
+              description: `Serial Number: ${formData.serialNumber}\n\n${formData.description}`,
               contact_email: formData.email,
               contact_phone: formData.phoneNumber,
               status: 'OPEN',
@@ -123,6 +127,26 @@ export default function Home() {
             <span className="h3" style={{ fontWeight: 700 }}>Open Tickets</span>
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <motion.a
+              href="/admin/login"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+              }}
+            >
+              <UserCog size={20} />
+            </motion.a>
             <ThemeToggle />
           </div>
         </div>
@@ -136,7 +160,7 @@ export default function Home() {
             {step === 0 && (
               <motion.div key="step0" variants={staggerContainer} initial="initial" animate="animate" exit="exit">
                 <motion.div variants={fadeIn} style={{ textAlign: 'center', marginBottom: '3rem' }}>
-                  <h1 className="h1" style={{ marginBottom: '1rem', background: 'linear-gradient(to right, var(--accent-color), var(--success))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  <h1 className="h1" style={{ marginBottom: '1rem', color: 'var(--text-primary)' }}>
                     How can we help you today?
                   </h1>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '1.25rem' }}>
@@ -198,20 +222,57 @@ export default function Home() {
                       <input
                         type="email"
                         placeholder="So we can contact you"
-                        style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{
+                          width: '100%',
+                          padding: '0.8rem',
+                          borderRadius: '8px',
+                          border: `1px solid ${emailError ? 'var(--error)' : 'var(--border-color)'}`,
+                          background: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)',
+                          outline: 'none'
+                        }}
                         value={formData.email}
-                        onChange={e => setFormData({ ...formData, email: e.target.value })}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setFormData({ ...formData, email: val });
+                          if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                            setEmailError('Please enter a valid email address');
+                          } else {
+                            setEmailError('');
+                          }
+                        }}
                       />
+                      {emailError && <p style={{ color: 'var(--error)', fontSize: '0.875rem', marginTop: '0.25rem' }}>{emailError}</p>}
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Phone Number</label>
                       <input
                         type="tel"
                         placeholder="Your phone number"
-                        style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{
+                          width: '100%',
+                          padding: '0.8rem',
+                          borderRadius: '8px',
+                          border: `1px solid ${phoneError ? 'var(--error)' : 'var(--border-color)'}`,
+                          background: 'var(--bg-secondary)',
+                          color: 'var(--text-primary)',
+                          outline: 'none'
+                        }}
                         value={formData.phoneNumber}
-                        onChange={e => setFormData({ ...formData, phoneNumber: e.target.value })}
+                        onChange={e => {
+                          const val = e.target.value;
+                          // Allow only digits, plus, spaces, dashes, parentheses
+                          if (!/^[\d\s\-\+\(\)]*$/.test(val)) return;
+
+                          setFormData({ ...formData, phoneNumber: val });
+                          if (val && !/^[\d\s\-\+\(\)]{10,}$/.test(val)) {
+                            setPhoneError('Please enter a valid phone number (min 10 digits)');
+                          } else {
+                            setPhoneError('');
+                          }
+                        }}
                       />
+                      {phoneError && <p style={{ color: 'var(--error)', fontSize: '0.875rem', marginTop: '0.25rem' }}>{phoneError}</p>}
                     </div>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Subject</label>
@@ -224,9 +285,9 @@ export default function Home() {
                             flex: 1,
                             padding: '1rem',
                             borderRadius: '12px',
-                            border: formData.subject === 'HT (Handy Talky)' ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                            background: formData.subject === 'HT (Handy Talky)' ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-secondary)',
-                            color: formData.subject === 'HT (Handy Talky)' ? 'var(--accent-color)' : 'var(--text-primary)',
+                            border: formData.subject === 'HT (Handy Talky)' ? '2px solid var(--text-primary)' : '1px solid var(--border-color)',
+                            background: formData.subject === 'HT (Handy Talky)' ? 'rgba(0, 0, 0, 0.05)' : 'var(--bg-secondary)',
+                            color: formData.subject === 'HT (Handy Talky)' ? 'var(--text-primary)' : 'var(--text-primary)',
                             fontWeight: 700,
                             cursor: 'pointer',
                             transition: 'all 0.2s ease',
@@ -234,18 +295,29 @@ export default function Home() {
                         >
                           HT (Handy Talky)
                         </motion.button>
+                        <motion.button
+                          onClick={() => setFormData({ ...formData, subject: 'Printer Issue' })}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          style={{
+                            flex: 1,
+                            padding: '1rem',
+                            borderRadius: '12px',
+                            border: formData.subject === 'Printer Issue' ? '2px solid var(--text-primary)' : '1px solid var(--border-color)',
+                            background: formData.subject === 'Printer Issue' ? 'rgba(0, 0, 0, 0.05)' : 'var(--bg-secondary)',
+                            color: formData.subject === 'Printer Issue' ? 'var(--text-primary)' : 'var(--text-primary)',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                        >
+                          Printer Issue
+                        </motion.button>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Or enter other subject..."
-                        style={{ width: '100%', marginTop: '1rem', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
-                        value={formData.subject === 'HT (Handy Talky)' ? '' : formData.subject}
-                        onChange={e => setFormData({ ...formData, subject: e.target.value })}
-                      />
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button onClick={handleNext} disabled={!formData.subject || !formData.email || !formData.phoneNumber}>
+                      <Button onClick={handleNext} disabled={!formData.subject || !formData.email || !formData.phoneNumber || !!emailError || !!phoneError}>
                         Next Step <ArrowRight size={16} style={{ marginLeft: 8 }} />
                       </Button>
                     </div>
@@ -286,6 +358,17 @@ export default function Home() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div>
                       <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Description</label>
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Serial Number</label>
+                        <input
+                          type="text"
+                          placeholder="Enter device serial number"
+                          style={{ width: '100%', padding: '0.8rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
+                          value={formData.serialNumber}
+                          onChange={e => setFormData({ ...formData, serialNumber: e.target.value })}
+                        />
+                      </div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Details</label>
                       <textarea
                         rows={5}
                         placeholder="Detailed explanation of the problem..."
@@ -512,7 +595,7 @@ export default function Home() {
                   We have received your request and will get back to you shortly at {formData.email}.
                 </p>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-                  <Button variant="secondary" onClick={() => { setStep(0); setFormData({ topic: '', subject: '', description: '', email: '', phoneNumber: '', imageFile: null }); }}>
+                  <Button variant="secondary" onClick={() => { setStep(0); setFormData({ topic: '', subject: 'HT (Handy Talky)', description: '', serialNumber: '', email: '', phoneNumber: '', imageFile: null }); }}>
                     Create Another
                   </Button>
                   <Button onClick={() => window.location.href = '/status'}>

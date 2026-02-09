@@ -1,32 +1,30 @@
 :root {
-  /* Light Mode (Premium White/Gray) */
-  --bg-primary: #f8f9fa;
+  /* Professional Light/Gray Theme */
+  --bg-primary: #f3f4f6;
+  /* Cool Gray 100 */
   --bg-secondary: #ffffff;
-  --text-primary: #1f2937;
+  --text-primary: #111827;
+  /* Gray 900 */
   --text-secondary: #4b5563;
+  /* Gray 600 */
   --border-color: #e5e7eb;
-  --accent-color: #6d28d9; /* Deep Purple */
-  --accent-hover: #5b21b6;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  /* Gray 200 */
+  --accent-color: #1f2937;
+  /* Gray 800 - Professional Neutral */
+  --accent-hover: #111827;
+  /* Gray 900 */
+  --success: #059669;
+  /* Emerald 600 - Keeping for status indicators only */
+  --warning: #d97706;
+  /* Amber 600 */
+  --error: #dc2626;
+  /* Red 600 */
+  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
-[data-theme='dracula'] {
-  /* Dracula Theme */
-  --bg-primary: #282a36;
-  --bg-secondary: #44475a;
-  --text-primary: #f8f8f2;
-  --text-secondary: #b8b8b8; /* Slightly dimmed white */
-  --border-color: #6272a4;
-  --accent-color: #ff79c6; /* Dracula Pink */
-  --accent-hover: #bd93f9; /* Dracula Purple */
-  --success: #50fa7b;
-  --warning: #ffb86c;
-  --error: #ff5555;
-  --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3);
-}
+/* Dracula theme removed */
+
 
 * {
   box-sizing: border-box;
@@ -37,7 +35,8 @@
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', sans-serif; /* Adding Inter as requested for premium feel */
+  font-family: 'Inter', sans-serif;
+  /* Adding Inter as requested for premium feel */
   transition: background-color 0.3s ease, color 0.3s ease;
   min-height: 100vh;
 }
@@ -59,11 +58,33 @@ a {
 }
 
 /* Typography Utilities */
-.h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.02em; }
-.h2 { font-size: 2rem; font-weight: 600; letter-spacing: -0.01em; }
-.h3 { font-size: 1.5rem; font-weight: 600; }
-.text-sm { font-size: 0.875rem; }
-.text-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+}
+
+.text-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
 
 /* Container */
 .container {

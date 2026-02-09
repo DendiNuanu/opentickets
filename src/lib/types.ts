@@ -30,6 +30,8 @@ export interface Message {
     ticket_id: string;
     user_id: string;
     content: string;
+    attachment_url?: string;
+    attachment_type?: 'image' | 'video' | 'file';
     created_at: string;
     profiles?: {
         full_name: string;

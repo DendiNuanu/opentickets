@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Home, Ticket, CheckCircle, Search,
     Settings, Bell, Menu, Plus, X, Clock, AlertCircle, XCircle as XCircleIcon, MessageSquare,
-    Edit, Trash2
+    Edit, Trash2, Image as ImageIcon, Paperclip
 } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import Button from '@/components/Button';
@@ -16,7 +16,7 @@ import { useRouter } from 'next/navigation';
 
 export default function Dashboard() {
     const router = useRouter();
-    const [filter, setFilter] = useState<'OPEN' | 'CLOSED' | 'USERS'>('OPEN');
+    const [filter, setFilter] = useState<'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'DONE' | 'USERS'>('OPEN');
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
@@ -30,6 +30,8 @@ export default function Dashboard() {
     const [users, setUsers] = useState<any[]>([]);
     const [comments, setComments] = useState<any[]>([]);
     const [commentText, setCommentText] = useState('');
+    const [attachment, setAttachment] = useState<File | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
     const [showAddUserModal, setShowAddUserModal] = useState(false);
     const [newUserData, setNewUserData] = useState({
         email: '',
@@ -51,7 +53,7 @@ export default function Dashboard() {
     // Check authentication and fetch profile
     useEffect(() => {
         const checkAuth = async () => {
-            const auth = sessionStorage.getItem('adminAuth');
+            const auth = localStorage.getItem('adminAuth');
             if (!auth || auth !== 'true') {
                 router.push('/admin/login');
                 return;
@@ -165,22 +167,67 @@ export default function Dashboard() {
     };
 
     const addComment = async () => {
-        if (!commentText.trim() || !selectedTicket) return;
+        if ((!commentText.trim() && !attachment) || !selectedTicket) return;
+
+        setIsUploading(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
+
+            let attachmentUrl = null;
+            let attachmentType = null;
+
+            if (attachment) {
+                const fileExt = attachment.name.split('.').pop();
+                const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+                const filePath = `ticket-attachments/${fileName}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('ticket-attachments')
+                    .upload(filePath, attachment);
+
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('ticket-attachments')
+                    .getPublicUrl(filePath);
+
+                attachmentUrl = publicUrl;
+                attachmentType = attachment.type.startsWith('image/') ? 'image' : 'video';
+            }
+
+            // Fallback: Append attachment info to content to avoid schema dependency
+            let finalContent = commentText.trim();
+            if (attachmentUrl) {
+                finalContent += `\n\n:::attachment|${attachmentType}|${attachmentUrl}:::`;
+            }
+
+            const payload: any = {
+                ticket_id: selectedTicket.id,
+                content: finalContent,
+                user_id: user?.id
+            };
+
+            // We do NOT send attachment_url/type to DB to avoid "column not found" error
+            // if (attachmentUrl) {
+            //    payload.attachment_url = attachmentUrl;
+            //    payload.attachment_type = attachmentType;
+            // }
+
             const { error } = await supabase
                 .from('messages')
-                .insert([{
-                    ticket_id: selectedTicket.id,
-                    content: commentText.trim(),
-                    user_id: user?.id
-                }]);
+                .insert([payload]);
 
             if (error) throw error;
+
             setCommentText('');
+            setAttachment(null);
             fetchComments(selectedTicket.id);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error adding comment:', err);
+            setToast({ message: `Failed to add comment: ${err.message || 'Unknown error'}`, type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+        } finally {
+            setIsUploading(false);
         }
     };
 
@@ -300,12 +347,15 @@ export default function Dashboard() {
                 console.warn("Supabase keys missing, running in demo mode");
                 setTickets([]);
             } else {
-                const statusFilter = filter === 'OPEN' ? ['OPEN', 'IN_PROGRESS'] : ['CLOSED', 'RESOLVED'];
-
                 let query = supabase
                     .from('tickets')
-                    .select('*')
-                    .in('status', statusFilter);
+                    .select('*');
+
+                if (filter === 'DONE') {
+                    query = query.eq('status', 'CLOSED');
+                } else if (filter !== 'USERS') {
+                    query = query.eq('status', filter);
+                }
 
                 // Role-based filtering: Users only see their own tickets
                 if (userProfile?.role === 'USER') {
@@ -427,7 +477,7 @@ export default function Dashboard() {
                         <Ticket size={18} /> Open Tickets
                     </a>
                     <a href="/closed-tickets" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
-                        <CheckCircle size={18} /> Closed Tickets
+                        <CheckCircle size={18} /> Done Tickets
                     </a>
                     {userProfile?.role === 'ADMIN' && (
                         <button onClick={() => setFilter('USERS')} className={`nav-item ${filter === 'USERS' ? 'active' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none', background: 'none', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left' }}>
@@ -439,7 +489,7 @@ export default function Dashboard() {
                 <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
                     <button
                         onClick={() => {
-                            sessionStorage.removeItem('adminAuth');
+                            localStorage.removeItem('adminAuth');
                             router.push('/admin/login');
                         }}
                         className="nav-item"
@@ -577,58 +627,36 @@ export default function Dashboard() {
                 </div>
 
                 {/* Filter Tabs */}
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border-color)' }}>
-                    <button
-                        onClick={() => setFilter('OPEN')}
-                        style={{
-                            padding: '0.75rem 1.5rem',
-                            background: 'none',
-                            border: 'none',
-                            borderBottom: filter === 'OPEN' ? '2px solid var(--accent-color)' : '2px solid transparent',
-                            color: filter === 'OPEN' ? 'var(--accent-color)' : 'var(--text-secondary)',
-                            fontWeight: filter === 'OPEN' ? 600 : 400,
-                            cursor: 'pointer',
-                        }}
-                    >
-                        Active
-                    </button>
-                    <button
-                        onClick={() => setFilter('CLOSED')}
-                        style={{
-                            padding: '0.75rem 1.5rem',
-                            background: 'none',
-                            border: 'none',
-                            borderBottom: filter === 'CLOSED' ? '2px solid var(--accent-color)' : '2px solid transparent',
-                            color: filter === 'CLOSED' ? 'var(--accent-color)' : 'var(--text-secondary)',
-                            fontWeight: filter === 'CLOSED' ? 600 : 400,
-                            cursor: 'pointer',
-                        }}
-                    >
-                        History
-                    </button>
-                    {userProfile?.role === 'ADMIN' && (
-                        <button
-                            onClick={() => setFilter('USERS')}
-                            style={{
-                                padding: '0.75rem 1.5rem',
-                                background: 'none',
-                                border: 'none',
-                                borderBottom: filter === 'USERS' ? '2px solid var(--accent-color)' : '2px solid transparent',
-                                color: filter === 'USERS' ? 'var(--accent-color)' : 'var(--text-secondary)',
-                                fontWeight: filter === 'USERS' ? 600 : 400,
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Users
-                        </button>
-                    )}
+                {/* Filter Tabs */}
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border-color)', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                    {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'DONE', 'USERS'].map((f) => {
+                        if (f === 'USERS' && userProfile?.role !== 'ADMIN') return null;
+                        return (
+                            <button
+                                key={f}
+                                onClick={() => setFilter(f as any)}
+                                style={{
+                                    padding: '0.75rem 1.5rem',
+                                    background: 'none',
+                                    border: 'none',
+                                    borderBottom: filter === f ? '2px solid var(--accent-color)' : '2px solid transparent',
+                                    color: filter === f ? 'var(--accent-color)' : 'var(--text-secondary)',
+                                    fontWeight: filter === f ? 600 : 400,
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                }}
+                            >
+                                {f.replace('_', ' ')}
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Ticket List or User List */}
                 <div style={{ marginBottom: '2rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <h3 className="h3">
-                            {filter === 'OPEN' ? 'Active Tickets' : filter === 'CLOSED' ? 'Ticket History' : 'User Management'}
+                            {filter === 'USERS' ? 'User Management' : `${filter.replace('_', ' ')} Tickets`}
                             ({filter === 'USERS' ? users.length : tickets.length})
                         </h3>
                         {filter !== 'USERS' && (
@@ -1426,27 +1454,124 @@ export default function Dashboard() {
                                                 {comments.length === 0 ? (
                                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>No comments yet.</p>
                                                 ) : (
-                                                    comments.map(comment => (
-                                                        <div key={comment.id} style={{ padding: '0.75rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                                <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{comment.profiles?.full_name || 'System'} <span style={{ fontWeight: 400, color: 'var(--text-secondary)', fontSize: '0.75rem' }}>({comment.profiles?.role || 'USER'})</span></span>
-                                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{new Date(comment.created_at).toLocaleString()}</span>
+                                                    comments.map(msg => {
+                                                        const attachmentMatch = msg.content.match(/:::attachment\|(image|video)\|(.*):::/);
+                                                        const cleanContent = msg.content.replace(/:::attachment\|.*:::/, '').trim();
+                                                        const attachmentType = msg.attachment_type || (attachmentMatch ? attachmentMatch[1] : null);
+                                                        const attachmentUrl = msg.attachment_url || (attachmentMatch ? attachmentMatch[2] : null);
+
+                                                        return (
+                                                            <div key={msg.id} style={{ background: msg.profiles?.role === 'ADMIN' ? 'rgba(79, 70, 229, 0.1)' : 'var(--bg-secondary)', padding: '1rem', borderRadius: '12px', borderBottomLeftRadius: msg.profiles?.role === 'ADMIN' ? '12px' : '4px', borderBottomRightRadius: msg.profiles?.role === 'ADMIN' ? '4px' : '12px' }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: msg.profiles?.role === 'ADMIN' ? 'var(--accent-color)' : 'var(--text-primary)' }}>
+                                                                        {msg.profiles?.full_name || 'User'}
+                                                                        {msg.profiles?.role === 'ADMIN' && <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'var(--accent-color)', color: '#fff', borderRadius: '4px', marginLeft: '0.5rem' }}>ADMIN</span>}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                        {new Date(msg.created_at).toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{cleanContent}</div>
+                                                                {attachmentUrl && (
+                                                                    <div style={{ marginTop: '0.75rem' }}>
+                                                                        {attachmentType === 'image' ? (
+                                                                            <img
+                                                                                src={attachmentUrl}
+                                                                                alt="Attachment"
+                                                                                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+                                                                            />
+                                                                        ) : (
+                                                                            <video
+                                                                                src={attachmentUrl}
+                                                                                controls
+                                                                                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }}
+                                                                            />
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                            <p style={{ fontSize: '0.875rem' }}>{comment.content}</p>
-                                                        </div>
-                                                    ))
+                                                        );
+                                                    })
                                                 )}
                                             </div>
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Write a comment..."
-                                                    value={commentText}
-                                                    onChange={e => setCommentText(e.target.value)}
-                                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none' }}
-                                                    onKeyPress={e => e.key === 'Enter' && addComment()}
-                                                />
-                                                <Button size="sm" onClick={addComment}>Send</Button>
+                                            <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '12px', marginTop: '1rem' }}>
+                                                {attachment && (
+                                                    <div style={{
+                                                        marginBottom: '0.75rem',
+                                                        padding: '0.5rem',
+                                                        background: 'var(--bg-primary)',
+                                                        borderRadius: '8px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        fontSize: '0.85rem'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <Paperclip size={14} />
+                                                            <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {attachment.name}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setAttachment(null)}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)' }}
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                                    <div style={{ flex: 1, position: 'relative' }}>
+                                                        <input
+                                                            type="text"
+                                                            value={commentText}
+                                                            onChange={(e) => setCommentText(e.target.value)}
+                                                            placeholder="Type a message..."
+                                                            style={{
+                                                                width: '100%',
+                                                                padding: '0.8rem',
+                                                                paddingRight: '2.5rem',
+                                                                borderRadius: '8px',
+                                                                border: '1px solid var(--border-color)',
+                                                                background: 'var(--bg-primary)',
+                                                                color: 'var(--text-primary)',
+                                                                outline: 'none'
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                                    e.preventDefault();
+                                                                    addComment();
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label
+                                                            style={{
+                                                                position: 'absolute',
+                                                                right: '0.8rem',
+                                                                top: '50%',
+                                                                transform: 'translateY(-50%)',
+                                                                cursor: 'pointer',
+                                                                color: 'var(--text-secondary)'
+                                                            }}
+                                                            title="Attach Image/Video"
+                                                        >
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*,video/*"
+                                                                style={{ display: 'none' }}
+                                                                onChange={(e) => {
+                                                                    if (e.target.files?.[0]) {
+                                                                        setAttachment(e.target.files[0]);
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <ImageIcon size={18} />
+                                                        </label>
+                                                    </div>
+                                                    <Button onClick={addComment} disabled={(!commentText.trim() && !attachment) || isUploading}>
+                                                        {isUploading ? '...' : <MessageSquare size={18} />}
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
