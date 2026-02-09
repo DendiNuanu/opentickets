@@ -22,7 +22,7 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  var savedTheme = localStorage.getItem('theme') || 'dracula';
+                  var savedTheme = localStorage.getItem('theme') || 'light';
                   document.documentElement.setAttribute('data-theme', savedTheme);
                 } catch (e) {}
               })();

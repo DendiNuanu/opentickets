@@ -12,11 +12,13 @@ import { supabase } from '@/lib/supabase';
 import { type Ticket as TicketType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import styles from '../dashboard/dashboard.module.css';
 
 export default function OpenTicketsPage() {
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [adminNotes, setAdminNotes] = useState('');
     const [updating, setUpdating] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -215,13 +217,7 @@ export default function OpenTicketsPage() {
 
     if (!isAuthenticated) {
         return (
-            <div style={{
-                display: 'flex',
-                minHeight: '100vh',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'var(--bg-primary)'
-            }}>
+            <div className={styles.container} style={{ alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
                     <motion.div
                         animate={{ rotate: 360 }}
@@ -242,47 +238,41 @@ export default function OpenTicketsPage() {
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+        <div className={styles.container}>
+            {/* Mobile Sidebar Overlay */}
+            <div
+                className={`${styles.overlay} ${isSidebarOpen ? styles.open : ''}`}
+                onClick={() => setIsSidebarOpen(false)}
+            />
+
             {/* Sidebar */}
-            <aside style={{ width: 240, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border-color)', padding: '1.5rem 1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
-                    <div style={{ width: 32, height: 32, background: 'var(--accent-color)', borderRadius: 8 }}></div>
+            <aside className={`${styles.sidebar} ${isSidebarOpen ? styles.open : ''}`}>
+                <div className={styles.sidebarHeader}>
+                    <div className={styles.logo}>
+                        <Ticket size={24} className={styles.logoIcon} />
+                    </div>
                     <span className="h3" style={{ fontWeight: 700 }}>OpenTickets</span>
                 </div>
 
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <a href="/dashboard" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                <nav className={styles.sidebarNav}>
+                    <a href="/dashboard" className={styles.navItem}>
                         <Home size={18} /> Overview
                     </a>
-                    <a href="/open-tickets" className="nav-item active" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-primary)', textDecoration: 'none' }}>
+                    <a href="/open-tickets" className={`${styles.navItem} ${styles.navItemActive}`}>
                         <Ticket size={18} /> Open Tickets
                     </a>
-                    <a href="/closed-tickets" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                    <a href="/closed-tickets" className={styles.navItem}>
                         <CheckCircle size={18} /> Done Tickets
                     </a>
                 </nav>
 
-                <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
+                <div className={styles.logoutWrapper}>
                     <button
                         onClick={() => {
                             localStorage.removeItem('adminAuth');
                             router.push('/admin/login');
                         }}
-                        className="nav-item"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            padding: '0.75rem 1rem',
-                            borderRadius: '8px',
-                            color: 'var(--text-secondary)',
-                            textDecoration: 'none',
-                            background: 'none',
-                            border: 'none',
-                            width: '100%',
-                            cursor: 'pointer',
-                            fontSize: '1rem'
-                        }}
+                        className={styles.navItem}
                     >
                         <Settings size={18} /> Logout
                     </button>
@@ -290,14 +280,22 @@ export default function OpenTicketsPage() {
             </aside>
 
             {/* Main Content */}
-            <main style={{ flex: 1, padding: '2rem' }}>
+            <main className={styles.main}>
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <div>
-                        <h1 className="h1">Open Tickets</h1>
-                        <p style={{ color: 'var(--text-secondary)' }}>Active support requests</p>
+                <div className={styles.header}>
+                    <div className={styles.headerTop}>
+                        <button
+                            className={styles.menuButton}
+                            onClick={() => setIsSidebarOpen(true)}
+                        >
+                            <Menu size={24} />
+                        </button>
+                        <div>
+                            <h1 className="h1">Open Tickets</h1>
+                            <p style={{ color: 'var(--text-secondary)' }}>Active support requests</p>
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div className={styles.actions}>
                         <button className="icon-button" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
                             <Bell size={18} />
                             <span style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, background: 'var(--error)', borderRadius: '50%' }}></span>
@@ -308,11 +306,16 @@ export default function OpenTicketsPage() {
 
                 {/* Ticket List */}
                 <div style={{ marginBottom: '2rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 className="h3">Active Tickets ({tickets.length})</h3>
-                        <Button variant="primary" size="sm" onClick={() => window.location.href = '/'}>
-                            <Plus size={16} style={{ marginRight: 8 }} /> New Ticket
-                        </Button>
+                    <div className={styles.sectionHeader}>
+                        <h3 className={`h3 ${styles.sectionTitle}`}>Active Tickets ({tickets.length})</h3>
+                        <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => window.location.href = '/'}
+                            className={styles.newTicketBtn}
+                        >
+                            <Plus size={18} /> New Ticket
+                        </motion.button>
                     </div>
 
                     {loading ? (
@@ -329,552 +332,532 @@ export default function OpenTicketsPage() {
                             </div>
                         </Card>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                        <div className={styles.grid}>
                             {tickets.map(ticket => (
-                                <div
+                                <motion.div
                                     key={ticket.id}
+                                    whileHover={{ y: -8, transition: { duration: 0.3 } }}
                                     onClick={() => setSelectedTicket(ticket)}
-                                    style={{ cursor: 'pointer' }}
+                                    style={{ cursor: 'pointer', height: '100%' }}
                                 >
-                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <Card className="hover-card">
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                        <Card className={styles.card}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                    <span className={`badge badge-${ticket.priority?.toLowerCase() || 'medium'}`}>{ticket.priority || 'MEDIUM'}</span>
-                                                    <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ fontSize: '0.65rem' }}>
+                                                    <span className={`${styles.badge} ${styles['badge' + (ticket.priority || 'MEDIUM')]}`}>
+                                                        {ticket.priority || 'MEDIUM'}
+                                                    </span>
+                                                    <div className={`${styles.statusBadge} ${styles['status' + ticket.status]}`}>
                                                         {ticket.status}
                                                     </div>
                                                 </div>
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>#{ticket.id.substring(0, 8)}</span>
+                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>#{ticket.id.substring(0, 8)}</span>
                                             </div>
-                                            <div>
-                                                <h4 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</h4>
-                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ticket.description}</p>
+                                            <div style={{ flex: 1 }}>
+                                                <h4 className={styles.cardTitle}>{ticket.title}</h4>
+                                                <p className={styles.cardDesc}>{ticket.description}</p>
                                             </div>
-                                            <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                <span>{ticket.topic}</span>
+                                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-secondary)' }}></div>
+                                                    {ticket.topic}
+                                                </div>
                                                 <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
                                             </div>
                                         </Card>
                                     </div>
-                                </div>
+                                </motion.div>
                             ))}
                         </div>
                     )}
                 </div>
-            </main>
+            </main >
 
             {/* Ticket Detail Modal - Same as dashboard */}
             <AnimatePresence>
-                {selectedTicket && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        style={{
-                            position: 'fixed',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            background: 'rgba(0, 0, 0, 0.7)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 1000,
-                            padding: '2rem',
-                        }}
-                        onClick={() => setSelectedTicket(null)}
-                    >
+                {
+                    selectedTicket && (
                         <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 20 }}
-                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
                             style={{
-                                background: 'var(--bg-secondary)',
-                                borderRadius: '16px',
-                                maxWidth: '700px',
-                                width: '100%',
-                                maxHeight: '90vh',
-                                overflow: 'auto',
-                                border: '1px solid var(--border-color)',
-                            }}
-                        >
-                            {/* Modal Header */}
-                            <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div>
-                                    <h2 className="h2">Ticket Details</h2>
-                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ID: #{selectedTicket.id.substring(0, 8)}</p>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedTicket(null)}
-                                    style={{
-                                        width: 32,
-                                        height: 32,
-                                        borderRadius: '50%',
-                                        border: '1px solid var(--border-color)',
-                                        background: 'var(--bg-primary)',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div style={{ padding: '1.5rem' }}>
-                                {/* Ticket Info */}
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                                        <span className={`badge badge-${selectedTicket.priority?.toLowerCase() || 'medium'}`}>
-                                            {selectedTicket.priority || 'MEDIUM'}
-                                        </span>
-                                        <span style={{ padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(189, 147, 249, 0.2)', color: 'var(--accent-color)' }}>
-                                            {selectedTicket.topic}
-                                        </span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            {getStatusIcon(selectedTicket.status)}
-                                            <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{selectedTicket.status}</span>
-                                        </div>
-                                    </div>
-
-                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>{selectedTicket.title}</h3>
-                                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{selectedTicket.description}</p>
-
-                                    {selectedTicket.image_url && (
-                                        <div style={{ marginBottom: '1.5rem' }}>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>Attached Image</div>
-                                            <a href={selectedTicket.image_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', transition: 'transform 0.2s ease' }}>
-                                                <img
-                                                    src={selectedTicket.image_url}
-                                                    alt="Ticket attachment"
-                                                    style={{
-                                                        maxWidth: '100%',
-                                                        maxHeight: '300px',
-                                                        borderRadius: '12px',
-                                                        border: '1px solid var(--border-color)',
-                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                                                        objectFit: 'contain'
-                                                    }}
-                                                />
-                                            </a>
-                                        </div>
-                                    )}
-
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Contact Email</div>
-                                            <div style={{ fontWeight: 600 }}>{selectedTicket.contact_email || 'N/A'}</div>
-                                        </div>
-                                        <div>
-                                            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Created</div>
-                                            <div style={{ fontWeight: 600 }}>
-                                                {new Date(selectedTicket.created_at).toLocaleString()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Admin Actions */}
-                                <div style={{ marginBottom: '1.5rem' }}>
-                                    <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Admin Actions</h4>
-
-                                    {/* Status Update */}
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Status</label>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                            {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(status => (
-                                                <button
-                                                    key={status}
-                                                    onClick={() => updateTicketStatus(selectedTicket.id, status)}
-                                                    disabled={updating || selectedTicket.status === status}
-                                                    style={{
-                                                        padding: '0.5rem 1rem',
-                                                        fontSize: '0.875rem',
-                                                        fontWeight: 600,
-                                                        borderRadius: '8px',
-                                                        border: selectedTicket.status === status ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                                        background: selectedTicket.status === status ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
-                                                        color: selectedTicket.status === status ? 'var(--accent-color)' : 'var(--text-primary)',
-                                                        cursor: updating || selectedTicket.status === status ? 'not-allowed' : 'pointer',
-                                                        opacity: updating || selectedTicket.status === status ? 0.6 : 1,
-                                                    }}
-                                                >
-                                                    {status.replace('_', ' ')}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Priority Update */}
-                                    <div style={{ marginBottom: '1rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Priority</label>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                            {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(priority => (
-                                                <button
-                                                    key={priority}
-                                                    onClick={() => updateTicketPriority(selectedTicket.id, priority)}
-                                                    disabled={updating || selectedTicket.priority === priority}
-                                                    style={{
-                                                        padding: '0.5rem 1rem',
-                                                        fontSize: '0.875rem',
-                                                        fontWeight: 600,
-                                                        borderRadius: '8px',
-                                                        border: selectedTicket.priority === priority ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                                                        background: selectedTicket.priority === priority ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
-                                                        color: selectedTicket.priority === priority ? 'var(--accent-color)' : 'var(--text-primary)',
-                                                        cursor: updating || selectedTicket.priority === priority ? 'not-allowed' : 'pointer',
-                                                        opacity: updating || selectedTicket.priority === priority ? 0.6 : 1,
-                                                    }}
-                                                >
-                                                    {priority}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Admin Notes */}
-                                    <div style={{ marginBottom: '1.5rem' }}>
-                                        <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
-                                            <MessageSquare size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                                            Add Internal Note
-                                        </label>
-                                        <textarea
-                                            value={adminNotes}
-                                            onChange={(e) => setAdminNotes(e.target.value)}
-                                            placeholder="Add notes for internal tracking..."
-                                            rows={3}
-                                            style={{
-                                                width: '100%',
-                                                padding: '0.75rem',
-                                                borderRadius: '8px',
-                                                border: '1px solid var(--border-color)',
-                                                background: 'var(--bg-primary)',
-                                                color: 'var(--text-primary)',
-                                                resize: 'vertical',
-                                                fontSize: '0.875rem',
-                                            }}
-                                        />
-                                    </div>
-
-                                    {/* Comments Section */}
-                                    <div style={{ marginTop: '2rem' }}>
-                                        <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Comments</h4>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', maxHeight: '300px', overflowY: 'auto' }}>
-                                            {comments.length === 0 ? (
-                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>No comments yet.</p>
-                                            ) : (
-                                                comments.map(msg => {
-                                                    const attachmentMatch = msg.content.match(/:::attachment\|(image|video)\|(.*):::/);
-                                                    const cleanContent = msg.content.replace(/:::attachment\|.*:::/, '').trim();
-                                                    const attachmentType = msg.attachment_type || (attachmentMatch ? attachmentMatch[1] : null);
-                                                    const attachmentUrl = msg.attachment_url || (attachmentMatch ? attachmentMatch[2] : null);
-
-                                                    return (
-                                                        <div key={msg.id} style={{ background: msg.profiles?.role === 'ADMIN' ? 'rgba(79, 70, 229, 0.1)' : 'var(--bg-secondary)', padding: '1rem', borderRadius: '12px', borderBottomLeftRadius: msg.profiles?.role === 'ADMIN' ? '12px' : '4px', borderBottomRightRadius: msg.profiles?.role === 'ADMIN' ? '4px' : '12px' }}>
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: msg.profiles?.role === 'ADMIN' ? 'var(--accent-color)' : 'var(--text-primary)' }}>
-                                                                    {msg.profiles?.full_name || 'User'}
-                                                                    {msg.profiles?.role === 'ADMIN' && <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'var(--accent-color)', color: '#fff', borderRadius: '4px', marginLeft: '0.5rem' }}>ADMIN</span>}
-                                                                </span>
-                                                                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                                    {new Date(msg.created_at).toLocaleString()}
-                                                                </span>
-                                                            </div>
-                                                            <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{cleanContent}</div>
-                                                            {attachmentUrl && (
-                                                                <div style={{ marginTop: '0.75rem' }}>
-                                                                    {attachmentType === 'image' ? (
-                                                                        <img
-                                                                            src={attachmentUrl}
-                                                                            alt="Attachment"
-                                                                            style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', border: '1px solid var(--border-color)' }}
-                                                                        />
-                                                                    ) : (
-                                                                        <video
-                                                                            src={attachmentUrl}
-                                                                            controls
-                                                                            style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }}
-                                                                        />
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                        <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '12px', marginTop: '1rem' }}>
-                                            {attachment && (
-                                                <div style={{
-                                                    marginBottom: '0.75rem',
-                                                    padding: '0.5rem',
-                                                    background: 'var(--bg-primary)',
-                                                    borderRadius: '8px',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'space-between',
-                                                    fontSize: '0.85rem'
-                                                }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <Paperclip size={14} />
-                                                        <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                            {attachment.name}
-                                                        </span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => setAttachment(null)}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)' }}
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
-                                            )}
-                                            <div style={{ display: 'flex', gap: '0.8rem' }}>
-                                                <div style={{ flex: 1, position: 'relative' }}>
-                                                    <input
-                                                        type="text"
-                                                        value={commentText}
-                                                        onChange={(e) => setCommentText(e.target.value)}
-                                                        placeholder="Type a message..."
-                                                        style={{
-                                                            width: '100%',
-                                                            padding: '0.8rem',
-                                                            paddingRight: '2.5rem',
-                                                            borderRadius: '8px',
-                                                            border: '1px solid var(--border-color)',
-                                                            background: 'var(--bg-primary)',
-                                                            color: 'var(--text-primary)',
-                                                            outline: 'none'
-                                                        }}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter' && !e.shiftKey) {
-                                                                e.preventDefault();
-                                                                addComment();
-                                                            }
-                                                        }}
-                                                    />
-                                                    <label
-                                                        style={{
-                                                            position: 'absolute',
-                                                            right: '0.8rem',
-                                                            top: '50%',
-                                                            transform: 'translateY(-50%)',
-                                                            cursor: 'pointer',
-                                                            color: 'var(--text-secondary)'
-                                                        }}
-                                                        title="Attach Image/Video"
-                                                    >
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*,video/*"
-                                                            style={{ display: 'none' }}
-                                                            onChange={(e) => {
-                                                                if (e.target.files?.[0]) {
-                                                                    setAttachment(e.target.files[0]);
-                                                                }
-                                                            }}
-                                                        />
-                                                        <ImageIcon size={18} />
-                                                    </label>
-                                                </div>
-                                                <Button onClick={addComment} disabled={(!commentText.trim() && !attachment) || isUploading}>
-                                                    {isUploading ? '...' : <MessageSquare size={18} />}
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Action Buttons */}
-                                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                                    <Button variant="secondary" onClick={() => setSelectedTicket(null)}>
-                                        Close
-                                    </Button>
-                                    <Button onClick={async () => {
-                                        if (!selectedTicket) return;
-
-                                        setUpdating(true);
-                                        try {
-                                            const { error } = await supabase
-                                                .from('tickets')
-                                                .update({
-                                                    admin_notes: adminNotes.trim() || null,
-                                                    status: selectedTicket.status,
-                                                    priority: selectedTicket.priority,
-                                                    updated_at: new Date().toISOString()
-                                                })
-                                                .eq('id', selectedTicket.id);
-
-                                            if (error) throw error;
-
-                                            // Update local state
-                                            setTickets(tickets.map(t =>
-                                                t.id === selectedTicket.id
-                                                    ? { ...selectedTicket, admin_notes: adminNotes.trim() || undefined }
-                                                    : t
-                                            ));
-
-                                            // setToast({ message: 'Changes saved successfully!', type: 'success' });
-                                            // setTimeout(() => setToast(null), 3000);
-
-                                            setShowSuccess(true);
-                                            setTimeout(() => {
-                                                setShowSuccess(false);
-                                                window.location.href = '/dashboard';
-                                            }, 2000);
-                                        } catch (err) {
-                                            console.error('Error saving changes:', err);
-                                            setToast({ message: 'Failed to save changes', type: 'error' });
-                                            setTimeout(() => setToast(null), 3000);
-                                        } finally {
-                                            setUpdating(false);
-                                        }
-                                    }}>
-                                        Save Changes
-                                    </Button>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Toast Notification */}
-            <AnimatePresence>
-                {toast && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -50, scale: 0.9 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -50, scale: 0.9 }}
-                        style={{
-                            position: 'fixed',
-                            top: '2rem',
-                            right: '2rem',
-                            zIndex: 2000,
-                            padding: '1rem 1.5rem',
-                            borderRadius: '12px',
-                            background: toast.type === 'success'
-                                ? 'linear-gradient(135deg, #50fa7b 0%, #5af78e 100%)'
-                                : 'linear-gradient(135deg, #ff5555 0%, #ff6b6b 100%)',
-                            color: '#fff',
-                            fontWeight: 600,
-                            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            minWidth: '300px',
-                        }}
-                    >
-                        <div style={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: '50%',
-                            background: 'rgba(255, 255, 255, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}>
-                            {toast.type === 'success' ? '✓' : '✕'}
-                        </div>
-                        <span>{toast.message}</span>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Centralized Success Popup */}
-            <AnimatePresence>
-                {showSuccess && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        style={{
-                            position: 'fixed',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            background: 'rgba(0, 0, 0, 0.8)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 3000,
-                        }}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.8, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.8, y: 20 }}
-                            style={{
-                                background: 'var(--bg-secondary)',
-                                padding: '3rem',
-                                borderRadius: '24px',
-                                textAlign: 'center',
-                                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-                                border: '1px solid var(--accent-color)',
-                                maxWidth: '400px',
-                                width: '90%',
-                            }}
-                        >
-                            <div style={{
-                                width: '80px',
-                                height: '80px',
-                                background: 'var(--success)',
-                                borderRadius: '50%',
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: 'rgba(0, 0, 0, 0.7)',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                margin: '0 auto 1.5rem',
-                                boxShadow: '0 0 20px rgba(80, 250, 123, 0.4)',
-                            }}>
-                                <CheckCircle size={48} color="#fff" />
-                            </div>
-                            <h2 className="h2" style={{ marginBottom: '1rem' }}>Success!</h2>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
-                                All changes have been saved successfully.
-                                Redirecting you back...
-                            </p>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                zIndex: 1000,
+                                padding: '2rem',
+                            }}
+                            onClick={() => setSelectedTicket(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    background: 'var(--bg-secondary)',
+                                    borderRadius: '16px',
+                                    maxWidth: '700px',
+                                    width: '100%',
+                                    maxHeight: '90vh',
+                                    overflow: 'auto',
+                                    border: '1px solid var(--border-color)',
+                                }}
+                            >
+                                {/* Modal Header */}
+                                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h2 className="h2">Ticket Details</h2>
+                                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>ID: #{selectedTicket.id.substring(0, 8)}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedTicket(null)}
+                                        style={{
+                                            width: 32,
+                                            height: 32,
+                                            borderRadius: '50%',
+                                            border: '1px solid var(--border-color)',
+                                            background: 'var(--bg-primary)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
 
-            <style jsx global>{`
-                .nav-item.active {
-                    background: rgba(189, 147, 249, 0.1);
-                    color: var(--accent-color) !important;
+                                {/* Modal Body */}
+                                <div style={{ padding: '1.5rem' }}>
+                                    {/* Ticket Info */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                                            <span className={`badge badge-${selectedTicket.priority?.toLowerCase() || 'medium'}`}>
+                                                {selectedTicket.priority || 'MEDIUM'}
+                                            </span>
+                                            <span style={{ padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(189, 147, 249, 0.2)', color: 'var(--accent-color)' }}>
+                                                {selectedTicket.topic}
+                                            </span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                {getStatusIcon(selectedTicket.status)}
+                                                <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>{selectedTicket.status}</span>
+                                            </div>
+                                        </div>
+
+                                        <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.75rem' }}>{selectedTicket.title}</h3>
+                                        <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>{selectedTicket.description}</p>
+
+                                        {selectedTicket.image_url && (
+                                            <div style={{ marginBottom: '1.5rem' }}>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>Attached Image</div>
+                                                <a href={selectedTicket.image_url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', transition: 'transform 0.2s ease' }}>
+                                                    <img
+                                                        src={selectedTicket.image_url}
+                                                        alt="Ticket attachment"
+                                                        style={{
+                                                            maxWidth: '100%',
+                                                            maxHeight: '300px',
+                                                            borderRadius: '12px',
+                                                            border: '1px solid var(--border-color)',
+                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                                            objectFit: 'contain'
+                                                        }}
+                                                    />
+                                                </a>
+                                            </div>
+                                        )}
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem', background: 'var(--bg-primary)', borderRadius: '8px' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Contact Email</div>
+                                                <div style={{ fontWeight: 600 }}>{selectedTicket.contact_email || 'N/A'}</div>
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Created</div>
+                                                <div style={{ fontWeight: 600 }}>
+                                                    {new Date(selectedTicket.created_at).toLocaleString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Admin Actions */}
+                                    <div style={{ marginBottom: '1.5rem' }}>
+                                        <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Admin Actions</h4>
+
+                                        {/* Status Update */}
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Status</label>
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(status => (
+                                                    <button
+                                                        key={status}
+                                                        onClick={() => updateTicketStatus(selectedTicket.id, status)}
+                                                        disabled={updating || selectedTicket.status === status}
+                                                        style={{
+                                                            padding: '0.5rem 1rem',
+                                                            fontSize: '0.875rem',
+                                                            fontWeight: 600,
+                                                            borderRadius: '8px',
+                                                            border: selectedTicket.status === status ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                            background: selectedTicket.status === status ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
+                                                            color: selectedTicket.status === status ? 'var(--accent-color)' : 'var(--text-primary)',
+                                                            cursor: updating || selectedTicket.status === status ? 'not-allowed' : 'pointer',
+                                                            opacity: updating || selectedTicket.status === status ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        {status.replace('_', ' ')}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Priority Update */}
+                                        <div style={{ marginBottom: '1rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Priority</label>
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(priority => (
+                                                    <button
+                                                        key={priority}
+                                                        onClick={() => updateTicketPriority(selectedTicket.id, priority)}
+                                                        disabled={updating || selectedTicket.priority === priority}
+                                                        style={{
+                                                            padding: '0.5rem 1rem',
+                                                            fontSize: '0.875rem',
+                                                            fontWeight: 600,
+                                                            borderRadius: '8px',
+                                                            border: selectedTicket.priority === priority ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
+                                                            background: selectedTicket.priority === priority ? 'rgba(189, 147, 249, 0.1)' : 'var(--bg-primary)',
+                                                            color: selectedTicket.priority === priority ? 'var(--accent-color)' : 'var(--text-primary)',
+                                                            cursor: updating || selectedTicket.priority === priority ? 'not-allowed' : 'pointer',
+                                                            opacity: updating || selectedTicket.priority === priority ? 0.6 : 1,
+                                                        }}
+                                                    >
+                                                        {priority}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Admin Notes */}
+                                        <div style={{ marginBottom: '1.5rem' }}>
+                                            <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                                                <MessageSquare size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                                                Add Internal Note
+                                            </label>
+                                            <textarea
+                                                value={adminNotes}
+                                                onChange={(e) => setAdminNotes(e.target.value)}
+                                                placeholder="Add notes for internal tracking..."
+                                                rows={3}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '0.75rem',
+                                                    borderRadius: '8px',
+                                                    border: '1px solid var(--border-color)',
+                                                    background: 'var(--bg-primary)',
+                                                    color: 'var(--text-primary)',
+                                                    resize: 'vertical',
+                                                    fontSize: '0.875rem',
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Comments Section */}
+                                        <div style={{ marginTop: '2rem' }}>
+                                            <h4 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Comments</h4>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem', maxHeight: '300px', overflowY: 'auto' }}>
+                                                {comments.length === 0 ? (
+                                                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', textAlign: 'center' }}>No comments yet.</p>
+                                                ) : (
+                                                    comments.map(msg => {
+                                                        const attachmentMatch = msg.content.match(/:::attachment\|(image|video)\|(.*):::/);
+                                                        const cleanContent = msg.content.replace(/:::attachment\|.*:::/, '').trim();
+                                                        const attachmentType = msg.attachment_type || (attachmentMatch ? attachmentMatch[1] : null);
+                                                        const attachmentUrl = msg.attachment_url || (attachmentMatch ? attachmentMatch[2] : null);
+
+                                                        return (
+                                                            <div key={msg.id} style={{ background: msg.profiles?.role === 'ADMIN' ? 'rgba(79, 70, 229, 0.1)' : 'var(--bg-secondary)', padding: '1rem', borderRadius: '12px', borderBottomLeftRadius: msg.profiles?.role === 'ADMIN' ? '12px' : '4px', borderBottomRightRadius: msg.profiles?.role === 'ADMIN' ? '4px' : '12px' }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                                                                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: msg.profiles?.role === 'ADMIN' ? 'var(--accent-color)' : 'var(--text-primary)' }}>
+                                                                        {msg.profiles?.full_name || 'User'}
+                                                                        {msg.profiles?.role === 'ADMIN' && <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'var(--accent-color)', color: '#fff', borderRadius: '4px', marginLeft: '0.5rem' }}>ADMIN</span>}
+                                                                    </span>
+                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                                                        {new Date(msg.created_at).toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{cleanContent}</div>
+                                                                {attachmentUrl && (
+                                                                    <div style={{ marginTop: '0.75rem' }}>
+                                                                        {attachmentType === 'image' ? (
+                                                                            <img
+                                                                                src={attachmentUrl}
+                                                                                alt="Attachment"
+                                                                                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px', border: '1px solid var(--border-color)' }}
+                                                                            />
+                                                                        ) : (
+                                                                            <video
+                                                                                src={attachmentUrl}
+                                                                                controls
+                                                                                style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }}
+                                                                            />
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })
+                                                )}
+                                            </div>
+                                            <div style={{ padding: '1rem', background: 'var(--bg-secondary)', borderRadius: '12px', marginTop: '1rem' }}>
+                                                {attachment && (
+                                                    <div style={{
+                                                        marginBottom: '0.75rem',
+                                                        padding: '0.5rem',
+                                                        background: 'var(--bg-primary)',
+                                                        borderRadius: '8px',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        fontSize: '0.85rem'
+                                                    }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <Paperclip size={14} />
+                                                            <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                {attachment.name}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setAttachment(null)}
+                                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)' }}
+                                                        >
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                <div style={{ display: 'flex', gap: '0.8rem' }}>
+                                                    <div style={{ flex: 1, position: 'relative' }}>
+                                                        <input
+                                                            type="text"
+                                                            value={commentText}
+                                                            onChange={(e) => setCommentText(e.target.value)}
+                                                            placeholder="Type a message..."
+                                                            style={{
+                                                                width: '100%',
+                                                                padding: '0.8rem',
+                                                                paddingRight: '2.5rem',
+                                                                borderRadius: '8px',
+                                                                border: '1px solid var(--border-color)',
+                                                                background: 'var(--bg-primary)',
+                                                                color: 'var(--text-primary)',
+                                                                outline: 'none'
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                                    e.preventDefault();
+                                                                    addComment();
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label
+                                                            style={{
+                                                                position: 'absolute',
+                                                                right: '0.8rem',
+                                                                top: '50%',
+                                                                transform: 'translateY(-50%)',
+                                                                cursor: 'pointer',
+                                                                color: 'var(--text-secondary)'
+                                                            }}
+                                                            title="Attach Image/Video"
+                                                        >
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*,video/*"
+                                                                style={{ display: 'none' }}
+                                                                onChange={(e) => {
+                                                                    if (e.target.files?.[0]) {
+                                                                        setAttachment(e.target.files[0]);
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <ImageIcon size={18} />
+                                                        </label>
+                                                    </div>
+                                                    <Button onClick={addComment} disabled={(!commentText.trim() && !attachment) || isUploading}>
+                                                        {isUploading ? '...' : <MessageSquare size={18} />}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                                        <Button variant="secondary" onClick={() => setSelectedTicket(null)}>
+                                            Close
+                                        </Button>
+                                        <Button onClick={async () => {
+                                            if (!selectedTicket) return;
+
+                                            setUpdating(true);
+                                            try {
+                                                const { error } = await supabase
+                                                    .from('tickets')
+                                                    .update({
+                                                        admin_notes: adminNotes.trim() || null,
+                                                        status: selectedTicket.status,
+                                                        priority: selectedTicket.priority,
+                                                        updated_at: new Date().toISOString()
+                                                    })
+                                                    .eq('id', selectedTicket.id);
+
+                                                if (error) throw error;
+
+                                                // Update local state
+                                                setTickets(tickets.map(t =>
+                                                    t.id === selectedTicket.id
+                                                        ? { ...selectedTicket, admin_notes: adminNotes.trim() || undefined }
+                                                        : t
+                                                ));
+
+                                                // setToast({ message: 'Changes saved successfully!', type: 'success' });
+                                                // setTimeout(() => setToast(null), 3000);
+
+                                                setShowSuccess(true);
+                                                setTimeout(() => {
+                                                    setShowSuccess(false);
+                                                    window.location.href = '/dashboard';
+                                                }, 2000);
+                                            } catch (err) {
+                                                console.error('Error saving changes:', err);
+                                                setToast({ message: 'Failed to save changes', type: 'error' });
+                                                setTimeout(() => setToast(null), 3000);
+                                            } finally {
+                                                setUpdating(false);
+                                            }
+                                        }}>
+                                            Save Changes
+                                        </Button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )
                 }
-                .nav-item:hover {
-                    background: rgba(255, 255, 255, 0.05);
+            </AnimatePresence >
+
+            {/* Toast Notification */}
+            <AnimatePresence>
+                {
+                    toast && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+                            style={{
+                                position: 'fixed',
+                                top: '2rem',
+                                right: '2rem',
+                                zIndex: 2000,
+                                padding: '1rem 1.5rem',
+                                borderRadius: '12px',
+                                background: toast.type === 'success'
+                                    ? 'linear-gradient(135deg, #50fa7b 0%, #5af78e 100%)'
+                                    : 'linear-gradient(135deg, #ff5555 0%, #ff6b6b 100%)',
+                                color: '#fff',
+                                fontWeight: 600,
+                                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                minWidth: '300px',
+                            }}
+                        >
+                            <div style={{
+                                width: 24,
+                                height: 24,
+                                borderRadius: '50%',
+                                background: 'rgba(255, 255, 255, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                            }}>
+                                {toast.type === 'success' ? '✓' : '✕'}
+                            </div>
+                            <span>{toast.message}</span>
+                        </motion.div>
+                    )
                 }
-                .status-badge {
-                    padding: 0.25rem 0.75rem;
-                    border-radius: 99px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    text-transform: uppercase;
+            </AnimatePresence >
+
+            {/* Centralized Success Popup */}
+            <AnimatePresence>
+                {
+                    showSuccess && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                                position: 'fixed',
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                bottom: 0,
+                                background: 'rgba(0, 0, 0, 0.8)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 3000,
+                            }}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.8, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.8, y: 20 }}
+                                style={{
+                                    background: 'var(--bg-secondary)',
+                                    padding: '3rem',
+                                    borderRadius: '24px',
+                                    textAlign: 'center',
+                                    boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                                    border: '1px solid var(--accent-color)',
+                                    maxWidth: '400px',
+                                    width: '90%',
+                                }}
+                            >
+                                <div style={{
+                                    width: '80px',
+                                    height: '80px',
+                                    background: 'var(--success)',
+                                    borderRadius: '50%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    margin: '0 auto 1.5rem',
+                                    boxShadow: '0 0 20px rgba(80, 250, 123, 0.4)',
+                                }}>
+                                    <CheckCircle size={48} color="#fff" />
+                                </div>
+                                <h2 className="h2" style={{ marginBottom: '1rem' }}>Success!</h2>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>
+                                    All changes have been saved successfully.
+                                    Redirecting you back...
+                                </p>
+                            </motion.div>
+                        </motion.div>
+                    )
                 }
-                .status-open { background: rgba(255, 85, 85, 0.2); color: #ff5555; }
-                .status-in_progress { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
-                .status-resolved { background: rgba(80, 250, 123, 0.2); color: #50fa7b; }
-                .status-closed { background: rgba(98, 114, 164, 0.2); color: #6272a4; }
-                .badge {
-                    padding: 0.25rem 0.6rem;
-                    border-radius: 99px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    letter-spacing: 0.05em;
-                }
-                .badge-low { background: rgba(80, 250, 123, 0.2); color: var(--success); }
-                .badge-medium { background: rgba(241, 250, 140, 0.2); color: var(--warning); }
-                .badge-high { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
-                .badge-critical { background: rgba(255, 85, 85, 0.2); color: var(--error); }
-            `}</style>
-        </div>
+            </AnimatePresence >
+        </div >
     );
 }

@@ -12,11 +12,13 @@ import { supabase } from '@/lib/supabase';
 import { type Ticket as TicketType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import styles from '../dashboard/dashboard.module.css';
 
 export default function ClosedTicketsPage() {
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [adminNotes, setAdminNotes] = useState('');
     const [updating, setUpdating] = useState(false);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -215,13 +217,7 @@ export default function ClosedTicketsPage() {
 
     if (!isAuthenticated) {
         return (
-            <div style={{
-                display: 'flex',
-                minHeight: '100vh',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'var(--bg-primary)'
-            }}>
+            <div className={styles.container} style={{ alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ textAlign: 'center' }}>
                     <motion.div
                         animate={{ rotate: 360 }}
@@ -242,47 +238,41 @@ export default function ClosedTicketsPage() {
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+        <div className={styles.container}>
+            {/* Mobile Sidebar Overlay */}
+            <div
+                className={`${styles.overlay} ${isSidebarOpen ? styles.open : ''}`}
+                onClick={() => setIsSidebarOpen(false)}
+            />
+
             {/* Sidebar */}
-            <aside style={{ width: 240, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border-color)', padding: '1.5rem 1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
-                    <div style={{ width: 32, height: 32, background: 'var(--accent-color)', borderRadius: 8 }}></div>
+            <aside className={`${styles.sidebar} ${isSidebarOpen ? styles.open : ''}`}>
+                <div className={styles.sidebarHeader}>
+                    <div className={styles.logo}>
+                        <Ticket size={24} className={styles.logoIcon} />
+                    </div>
                     <span className="h3" style={{ fontWeight: 700 }}>OpenTickets</span>
                 </div>
 
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <a href="/dashboard" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                <nav className={styles.sidebarNav}>
+                    <a href="/dashboard" className={styles.navItem}>
                         <Home size={18} /> Overview
                     </a>
-                    <a href="/open-tickets" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                    <a href="/open-tickets" className={styles.navItem}>
                         <Ticket size={18} /> Open Tickets
                     </a>
-                    <a href="/closed-tickets" className="nav-item active" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-primary)', textDecoration: 'none' }}>
+                    <a href="/closed-tickets" className={`${styles.navItem} ${styles.navItemActive}`}>
                         <CheckCircle size={18} /> Done Tickets
                     </a>
                 </nav>
 
-                <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
+                <div className={styles.logoutWrapper}>
                     <button
                         onClick={() => {
                             localStorage.removeItem('adminAuth');
                             router.push('/admin/login');
                         }}
-                        className="nav-item"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            padding: '0.75rem 1rem',
-                            borderRadius: '8px',
-                            color: 'var(--text-secondary)',
-                            textDecoration: 'none',
-                            background: 'none',
-                            border: 'none',
-                            width: '100%',
-                            cursor: 'pointer',
-                            fontSize: '1rem'
-                        }}
+                        className={styles.navItem}
                     >
                         <Settings size={18} /> Logout
                     </button>
@@ -290,14 +280,22 @@ export default function ClosedTicketsPage() {
             </aside>
 
             {/* Main Content */}
-            <main style={{ flex: 1, padding: '2rem' }}>
+            <main className={styles.main}>
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <div>
-                        <h1 className="h1">Done Tickets</h1>
-                        <p style={{ color: 'var(--text-secondary)' }}>Completed support requests</p>
+                <div className={styles.header}>
+                    <div className={styles.headerTop}>
+                        <button
+                            className={styles.menuButton}
+                            onClick={() => setIsSidebarOpen(true)}
+                        >
+                            <Menu size={24} />
+                        </button>
+                        <div>
+                            <h1 className="h1">Done Tickets</h1>
+                            <p style={{ color: 'var(--text-secondary)' }}>Completed support requests</p>
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div className={styles.actions}>
                         <button className="icon-button" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}>
                             <Bell size={18} />
                             <span style={{ position: 'absolute', top: 8, right: 8, width: 8, height: 8, background: 'var(--error)', borderRadius: '50%' }}></span>
@@ -308,11 +306,16 @@ export default function ClosedTicketsPage() {
 
                 {/* Ticket List */}
                 <div style={{ marginBottom: '2rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 className="h3">Tickets ({tickets.length})</h3>
-                        <Button variant="primary" size="sm" onClick={() => window.location.href = '/'}>
-                            <Plus size={16} style={{ marginRight: 8 }} /> New Ticket
-                        </Button>
+                    <div className={styles.sectionHeader}>
+                        <h3 className={`h3 ${styles.sectionTitle}`}>Tickets ({tickets.length})</h3>
+                        <motion.button
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => window.location.href = '/'}
+                            className={styles.newTicketBtn}
+                        >
+                            <Plus size={18} /> New Ticket
+                        </motion.button>
                     </div>
 
                     {loading ? (
@@ -328,35 +331,41 @@ export default function ClosedTicketsPage() {
                             </div>
                         </Card>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                        <div className={styles.grid}>
                             {tickets.map(ticket => (
-                                <div
+                                <motion.div
                                     key={ticket.id}
+                                    whileHover={{ y: -8, transition: { duration: 0.3 } }}
                                     onClick={() => setSelectedTicket(ticket)}
-                                    style={{ cursor: 'pointer' }}
+                                    style={{ cursor: 'pointer', height: '100%' }}
                                 >
-                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                        <Card className="hover-card">
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                        <Card className={styles.card}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                    <span className={`badge badge-${ticket.priority?.toLowerCase() || 'medium'}`}>{ticket.priority || 'MEDIUM'}</span>
-                                                    <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ fontSize: '0.65rem' }}>
+                                                    <span className={`${styles.badge} ${styles['badge' + (ticket.priority || 'MEDIUM')]}`}>
+                                                        {ticket.priority || 'MEDIUM'}
+                                                    </span>
+                                                    <div className={`${styles.statusBadge} ${styles['status' + ticket.status]}`}>
                                                         {ticket.status}
                                                     </div>
                                                 </div>
-                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>#{ticket.id.substring(0, 8)}</span>
+                                                <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>#{ticket.id.substring(0, 8)}</span>
                                             </div>
-                                            <div>
-                                                <h4 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</h4>
-                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ticket.description}</p>
+                                            <div style={{ flex: 1 }}>
+                                                <h4 className={styles.cardTitle}>{ticket.title}</h4>
+                                                <p className={styles.cardDesc}>{ticket.description}</p>
                                             </div>
-                                            <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                <span>{ticket.topic}</span>
+                                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-secondary)', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text-secondary)' }}></div>
+                                                    {ticket.topic}
+                                                </div>
                                                 <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
                                             </div>
                                         </Card>
                                     </div>
-                                </div>
+                                </motion.div>
                             ))}
                         </div>
                     )}
@@ -843,37 +852,7 @@ export default function ClosedTicketsPage() {
                 )}
             </AnimatePresence>
 
-            <style jsx global>{`
-                .nav-item.active {
-                    background: rgba(189, 147, 249, 0.1);
-                    color: var(--accent-color) !important;
-                }
-                .nav-item:hover {
-                    background: rgba(255, 255, 255, 0.05);
-                }
-                .status-badge {
-                    padding: 0.25rem 0.75rem;
-                    border-radius: 99px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                }
-                .status-open { background: rgba(255, 85, 85, 0.2); color: #ff5555; }
-                .status-in_progress { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
-                .status-resolved { background: rgba(80, 250, 123, 0.2); color: #50fa7b; }
-                .status-closed { background: rgba(98, 114, 164, 0.2); color: #6272a4; }
-                .badge {
-                    padding: 0.25rem 0.6rem;
-                    border-radius: 99px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    letter-spacing: 0.05em;
-                }
-                .badge-low { background: rgba(80, 250, 123, 0.2); color: var(--success); }
-                .badge-medium { background: rgba(241, 250, 140, 0.2); color: var(--warning); }
-                .badge-high { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
-                .badge-critical { background: rgba(255, 85, 85, 0.2); color: var(--error); }
-            `}</style>
+
         </div>
     );
 }

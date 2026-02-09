@@ -13,10 +13,13 @@ import { supabase } from '@/lib/supabase';
 import { type Ticket as TicketType, type Notification as NotificationType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import styles from './dashboard.module.css';
 
 export default function Dashboard() {
     const router = useRouter();
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [filter, setFilter] = useState<'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'DONE' | 'USERS'>('OPEN');
+
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
@@ -461,52 +464,46 @@ export default function Dashboard() {
     }
 
     return (
-        <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+        <div className={styles.container}>
+            {/* Mobile Overlay */}
+            <div
+                className={`${styles.overlay} ${isSidebarOpen ? styles.open : ''}`}
+                onClick={() => setIsSidebarOpen(false)}
+            />
+
             {/* Sidebar */}
-            <aside style={{ width: 240, background: 'var(--bg-secondary)', borderRight: '1px solid var(--border-color)', padding: '1.5rem 1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
-                    <div style={{ width: 32, height: 32, background: 'var(--accent-color)', borderRadius: 8 }}></div>
+            <aside className={`${styles.sidebar} ${isSidebarOpen ? styles.open : ''}`}>
+                <div className={styles.sidebarHeader}>
+                    <div className={styles.logo}>
+                        <Ticket size={24} color="#fff" />
+                    </div>
                     <span className="h3" style={{ fontWeight: 700 }}>OpenTickets</span>
                 </div>
 
-                <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <a href="/dashboard" className="nav-item active" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-primary)', textDecoration: 'none' }}>
+                <nav className={styles.sidebarNav}>
+                    <a href="/dashboard" className={`${styles.navItem} ${styles.navItemActive}`}>
                         <Home size={18} /> Overview
                     </a>
-                    <a href="/open-tickets" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                    <a href="/open-tickets" className={styles.navItem}>
                         <Ticket size={18} /> Open Tickets
                     </a>
-                    <a href="/closed-tickets" className="nav-item" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none' }}>
+                    <a href="/closed-tickets" className={styles.navItem}>
                         <CheckCircle size={18} /> Done Tickets
                     </a>
                     {userProfile?.role === 'ADMIN' && (
-                        <button onClick={() => setFilter('USERS')} className={`nav-item ${filter === 'USERS' ? 'active' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', color: 'var(--text-secondary)', textDecoration: 'none', background: 'none', border: 'none', width: '100%', cursor: 'pointer', textAlign: 'left' }}>
+                        <button onClick={() => { setFilter('USERS'); setIsSidebarOpen(false); }} className={`${styles.navItem} ${filter === 'USERS' ? styles.navItemActive : ''}`}>
                             <Plus size={18} /> User Management
                         </button>
                     )}
                 </nav>
 
-                <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', right: '1rem' }}>
+                <div className={styles.logoutWrapper}>
                     <button
                         onClick={() => {
                             localStorage.removeItem('adminAuth');
                             router.push('/admin/login');
                         }}
-                        className="nav-item"
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.75rem',
-                            padding: '0.75rem 1rem',
-                            borderRadius: '8px',
-                            color: 'var(--text-secondary)',
-                            textDecoration: 'none',
-                            background: 'none',
-                            border: 'none',
-                            width: '100%',
-                            cursor: 'pointer',
-                            fontSize: '1rem'
-                        }}
+                        className={styles.navItem}
                     >
                         <Settings size={18} /> Logout
                     </button>
@@ -514,17 +511,25 @@ export default function Dashboard() {
             </aside>
 
             {/* Main Content */}
-            <main style={{ flex: 1, padding: '2rem' }}>
+            <main className={styles.main}>
                 {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-                    <div>
-                        <h1 className="h1">Dashboard</h1>
-                        <p style={{ color: 'var(--text-secondary)' }}>Welcome back, {userProfile?.full_name || 'Admin'}</p>
-                        {!userProfile && isAuthenticated && (
-                            <p style={{ color: 'var(--error)', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Profile not found. Please run the SQL fix.</p>
-                        )}
+                <div className={styles.header}>
+                    <div className={styles.headerTop}>
+                        <button
+                            className={styles.menuButton}
+                            onClick={() => setIsSidebarOpen(true)}
+                        >
+                            <Menu size={24} />
+                        </button>
+                        <div>
+                            <h1 className={`h1 ${styles.pageTitle}`}>Dashboard</h1>
+                            <p className={styles.welcomeText}>Welcome back, {userProfile?.full_name || 'Admin'}</p>
+                            {!userProfile && isAuthenticated && (
+                                <p style={{ color: 'var(--error)', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Profile not found. Please run the SQL fix.</p>
+                            )}
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', position: 'relative' }}>
+                    <div className={styles.actions}>
                         <button
                             className="icon-button"
                             onClick={() => setShowNotifications(!showNotifications)}
@@ -627,24 +632,14 @@ export default function Dashboard() {
                 </div>
 
                 {/* Filter Tabs */}
-                {/* Filter Tabs */}
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', borderBottom: '1px solid var(--border-color)', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                <div className={styles.tabs}>
                     {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'DONE', 'USERS'].map((f) => {
                         if (f === 'USERS' && userProfile?.role !== 'ADMIN') return null;
                         return (
                             <button
                                 key={f}
                                 onClick={() => setFilter(f as any)}
-                                style={{
-                                    padding: '0.75rem 1.5rem',
-                                    background: 'none',
-                                    border: 'none',
-                                    borderBottom: filter === f ? '2px solid var(--accent-color)' : '2px solid transparent',
-                                    color: filter === f ? 'var(--accent-color)' : 'var(--text-secondary)',
-                                    fontWeight: filter === f ? 600 : 400,
-                                    cursor: 'pointer',
-                                    whiteSpace: 'nowrap'
-                                }}
+                                className={`${styles.tabBtn} ${filter === f ? styles.tabBtnActive : ''}`}
                             >
                                 {f.replace('_', ' ')}
                             </button>
@@ -654,51 +649,27 @@ export default function Dashboard() {
 
                 {/* Ticket List or User List */}
                 <div style={{ marginBottom: '2rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                        <h3 className="h3">
+                    <div className={styles.sectionHeader}>
+                        <h3 className={`h3 ${styles.sectionTitle}`}>
                             {filter === 'USERS' ? 'User Management' : `${filter.replace('_', ' ')} Tickets`}
                             ({filter === 'USERS' ? users.length : tickets.length})
                         </h3>
                         {filter !== 'USERS' && (
                             <motion.button
-                                whileHover={{ scale: 1.05, y: -2, boxShadow: '0 10px 20px rgba(109, 40, 217, 0.2)' }}
-                                whileTap={{ scale: 0.95 }}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() => window.location.href = '/'}
-                                style={{
-                                    padding: '0.6rem 1.25rem',
-                                    borderRadius: '12px',
-                                    border: 'none',
-                                    background: 'var(--accent-color)',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    fontSize: '0.875rem'
-                                }}
+                                className={styles.newTicketBtn}
                             >
                                 <Plus size={18} /> New Ticket
                             </motion.button>
                         )}
                         {filter === 'USERS' && (
                             <motion.button
-                                whileHover={{ scale: 1.05, y: -2, boxShadow: '0 10px 20px rgba(109, 40, 217, 0.2)' }}
-                                whileTap={{ scale: 0.95 }}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
                                 onClick={() => setShowAddUserModal(true)}
-                                style={{
-                                    padding: '0.6rem 1.25rem',
-                                    borderRadius: '12px',
-                                    border: 'none',
-                                    background: 'linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%)',
-                                    color: '#fff',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '0.5rem',
-                                    fontSize: '0.875rem'
-                                }}
+                                className={styles.newTicketBtn}
                             >
                                 <Plus size={18} /> Add Member
                             </motion.button>
@@ -708,7 +679,7 @@ export default function Dashboard() {
                     {loading && filter !== 'USERS' ? (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
                     ) : filter === 'USERS' ? (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                        <div className={styles.grid}>
                             {users.map(user => (
                                 <motion.div
                                     key={user.id}
@@ -718,14 +689,7 @@ export default function Dashboard() {
                                     whileHover={{ y: -5, boxShadow: '0 20px 40px rgba(109, 40, 217, 0.15)' }}
                                     style={{ height: '100%' }}
                                 >
-                                    <Card style={{
-                                        height: '100%',
-                                        padding: '1.25rem',
-                                        background: 'rgba(255, 255, 255, 0.02)',
-                                        backdropFilter: 'blur(10px)',
-                                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                                        transition: 'all 0.3s ease'
-                                    }}>
+                                    <Card className={styles.card}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
                                                 <div style={{
@@ -804,7 +768,7 @@ export default function Dashboard() {
                             </div>
                         </Card>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
+                        <div className={styles.grid}>
                             {tickets.map(ticket => (
                                 <motion.div
                                     key={ticket.id}
@@ -813,29 +777,21 @@ export default function Dashboard() {
                                     style={{ cursor: 'pointer', height: '100%' }}
                                 >
                                     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                                        <Card style={{
-                                            height: '100%',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            padding: '1.5rem',
-                                            transition: 'box-shadow 0.3s ease',
-                                            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                                            border: '1px solid var(--border-color)'
-                                        }} className="premium-card">
+                                        <Card className={styles.card}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                    <span className={`badge badge-${ticket.priority?.toLowerCase() || 'medium'}`} style={{ padding: '0.25rem 0.75rem', borderRadius: '8px' }}>
+                                                    <span className={`${styles.badge} ${styles['badge' + (ticket.priority || 'MEDIUM')]}`}>
                                                         {ticket.priority || 'MEDIUM'}
                                                     </span>
-                                                    <div className={`status-badge status-${ticket.status.toLowerCase()}`} style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                                                    <div className={`${styles.statusBadge} ${styles['status' + ticket.status]}`}>
                                                         {ticket.status}
                                                     </div>
                                                 </div>
                                                 <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}>#{ticket.id.substring(0, 8)}</span>
                                             </div>
                                             <div style={{ flex: 1 }}>
-                                                <h4 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem', color: 'var(--text-primary)' }}>{ticket.title}</h4>
-                                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{ticket.description}</p>
+                                                <h4 className={styles.cardTitle}>{ticket.title}</h4>
+                                                <p className={styles.cardDesc}>{ticket.description}</p>
                                             </div>
                                             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -1340,7 +1296,7 @@ export default function Dashboard() {
                                     {/* Ticket Info */}
                                     <div style={{ marginBottom: '1.5rem' }}>
                                         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                                            <span className={`badge badge-${selectedTicket.priority?.toLowerCase() || 'medium'}`}>
+                                            <span className={`${styles.badge} ${styles['badge' + (selectedTicket.priority || 'MEDIUM')]}`}>
                                                 {selectedTicket.priority || 'MEDIUM'}
                                             </span>
                                             <span style={{ padding: '0.25rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', fontWeight: 700, background: 'rgba(189, 147, 249, 0.2)', color: 'var(--accent-color)' }}>
@@ -1737,41 +1693,7 @@ export default function Dashboard() {
                 }
             </AnimatePresence >
 
-            <style jsx global>{`
-                .nav-item.active {
-                    background: rgba(189, 147, 249, 0.1);
-                    color: var(--accent-color) !important;
-                }
-                .nav-item:hover {
-                    background: rgba(255, 255, 255, 0.05);
-                }
-                .status-badge {
-                    padding: 0.25rem 0.75rem;
-                    border-radius: 99px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    text-transform: uppercase;
-                }
-                .status-open { background: rgba(255, 85, 85, 0.2); color: #ff5555; }
-                .status-in_progress { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
-                .status-resolved { background: rgba(80, 250, 123, 0.2); color: #50fa7b; }
-                .status-closed { background: rgba(98, 114, 164, 0.2); color: #6272a4; }
-                .badge {
-                    padding: 0.25rem 0.6rem;
-                    border-radius: 99px;
-                    font-size: 0.75rem;
-                    font-weight: 700;
-                    letter-spacing: 0.05em;
-                }
-                .badge-low { background: rgba(80, 250, 123, 0.2); color: var(--success); }
-                .badge-medium { background: rgba(241, 250, 140, 0.2); color: var(--warning); }
-                .badge-high { background: rgba(255, 184, 108, 0.2); color: #ffb86c; }
-                .badge-critical { background: rgba(255, 85, 85, 0.2); color: var(--error); }
-                .premium-card:hover {
-                    box-shadow: 0 20px 40px rgba(109, 40, 217, 0.1) !important;
-                    border-color: rgba(109, 40, 217, 0.2) !important;
-                }
-            `}</style>
+
         </div >
     );
 }

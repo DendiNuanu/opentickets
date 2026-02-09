@@ -53,10 +53,6 @@ a {
   -webkit-backdrop-filter: blur(10px);
 }
 
-[data-theme='dracula'] .glass {
-  background: rgba(40, 42, 54, 0.7);
-}
-
 /* Typography Utilities */
 .h1 {
   font-size: 2.5rem;
