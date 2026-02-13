@@ -58,9 +58,21 @@ export default function Home() {
     setError(null);
 
     try {
-      // Image upload is skipped for now in PostgreSQL migration
-      // In a real app, you'd use a cloud storage provider or a custom upload endpoint
-      const imageUrl = '';
+      let imageUrl = '';
+
+      if (formData.imageFile) {
+        const uploadData = new FormData();
+        uploadData.append('file', formData.imageFile);
+
+        const uploadRes = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadData,
+        });
+
+        if (!uploadRes.ok) throw new Error('Failed to upload image');
+        const uploadResult = await uploadRes.json();
+        imageUrl = uploadResult.url;
+      }
 
       const res = await createTicket({
         topic: topics.find(t => t.id === formData.topic)?.label || formData.topic,

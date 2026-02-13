@@ -159,6 +159,15 @@ export default function StatusPage() {
                                                     <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '0.75rem' }}>
                                                         {ticket.description}
                                                     </p>
+                                                    {ticket.image_url && (
+                                                        <div style={{ marginBottom: '1rem' }}>
+                                                            <img
+                                                                src={ticket.image_url}
+                                                                alt="Attachment"
+                                                                style={{ maxWidth: '200px', maxHeight: '150px', borderRadius: '8px', border: '1px solid var(--border-color)', objectFit: 'cover' }}
+                                                            />
+                                                        </div>
+                                                    )}
                                                     <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                                         {ticket.contact_email && <span>📧 {ticket.contact_email}</span>}
                                                         <span>ID: #{ticket.id.substring(0, 8)}</span>
