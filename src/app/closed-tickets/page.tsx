@@ -8,7 +8,14 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
-import { supabase } from '@/lib/supabase';
+import {
+    getTickets,
+    updateTicketStatus,
+    updateTicketPriority,
+    getComments,
+    createComment
+} from '@/lib/actions/tickets';
+import { getCurrentUser, signOut } from '@/lib/actions/auth';
 import { type Ticket as TicketType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -27,22 +34,27 @@ export default function ClosedTicketsPage() {
     const [commentText, setCommentText] = useState('');
     const [attachment, setAttachment] = useState<File | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [userProfile, setUserProfile] = useState<any>(null);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const router = useRouter();
 
     // Check authentication
     useEffect(() => {
-        const auth = localStorage.getItem('adminAuth');
-        if (!auth || auth !== 'true') {
-            router.push('/admin/login');
-        } else {
-            setIsAuthenticated(true);
-        }
+        const checkAuth = async () => {
+            const user = await getCurrentUser();
+            if (!user) {
+                router.push('/admin/login');
+            } else {
+                setUserProfile(user);
+                setIsAuthenticated(true);
+            }
+        };
+        checkAuth();
     }, [router]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
-        fetchTickets();
+        handleFetchTickets();
     }, [isAuthenticated]);
 
     useEffect(() => {
@@ -54,16 +66,7 @@ export default function ClosedTicketsPage() {
 
     const fetchComments = async (ticketId: string) => {
         try {
-            const { data, error } = await supabase
-                .from('messages')
-                .select(`
-                    *,
-                    profiles:user_id (full_name, role)
-                `)
-                .eq('ticket_id', ticketId)
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
+            const data = await getComments(ticketId);
             setComments(data || []);
         } catch (err) {
             console.error('Error fetching comments:', err);
@@ -71,86 +74,30 @@ export default function ClosedTicketsPage() {
     };
 
     const addComment = async () => {
-        if ((!commentText.trim() && !attachment) || !selectedTicket) return;
+        if (!commentText.trim() || !selectedTicket) return;
 
         setIsUploading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const res = await createComment(selectedTicket.id, commentText.trim(), userProfile?.id);
 
-            let attachmentUrl = null;
-            let attachmentType = null;
-
-            if (attachment) {
-                const fileExt = attachment.name.split('.').pop();
-                const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-                const filePath = `ticket-attachments/${fileName}`;
-
-                const { error: uploadError } = await supabase.storage
-                    .from('ticket-attachments')
-                    .upload(filePath, attachment);
-
-                if (uploadError) throw uploadError;
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('ticket-attachments')
-                    .getPublicUrl(filePath);
-
-                attachmentUrl = publicUrl;
-                attachmentType = attachment.type.startsWith('image/') ? 'image' : 'video';
-            }
-
-            // Fallback: Append attachment info to content to avoid schema dependency
-            let finalContent = commentText.trim();
-            if (attachmentUrl) {
-                finalContent += `\n\n:::attachment|${attachmentType}|${attachmentUrl}:::`;
-            }
-
-            const payload: any = {
-                ticket_id: selectedTicket.id,
-                content: finalContent,
-                user_id: user?.id
-            };
-
-            // We do NOT send attachment_url/type to DB to avoid "column not found" error
-            // if (attachmentUrl) {
-            //    payload.attachment_url = attachmentUrl;
-            //    payload.attachment_type = attachmentType;
-            // }
-
-            const { error } = await supabase
-                .from('messages')
-                .insert([payload]);
-
-            if (error) throw error;
+            if (!res.success) throw new Error('Failed to add comment');
 
             setCommentText('');
-            setAttachment(null);
             fetchComments(selectedTicket.id);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error adding comment:', err);
-            setToast({ message: 'Failed to add comment', type: 'error' });
+            setToast({ message: `Failed to add comment: ${err.message || 'Unknown error'}`, type: 'error' });
             setTimeout(() => setToast(null), 3000);
         } finally {
             setIsUploading(false);
         }
     };
 
-    const fetchTickets = async () => {
+    const handleFetchTickets = async () => {
         setLoading(true);
         try {
-            if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) {
-                console.warn("Supabase keys missing, running in demo mode");
-                setTickets([]);
-            } else {
-                const { data, error } = await supabase
-                    .from('tickets')
-                    .select('*')
-                    .in('status', ['CLOSED', 'RESOLVED'])
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
-                setTickets(data as TicketType[] || []);
-            }
+            const data = await getTickets('CLOSED');
+            setTickets(data as TicketType[] || []);
         } catch (err) {
             console.error('Error fetching tickets:', err);
         } finally {
@@ -158,15 +105,11 @@ export default function ClosedTicketsPage() {
         }
     };
 
-    const updateTicketStatus = async (ticketId: string, newStatus: string) => {
+    const handleUpdateTicketStatus = async (ticketId: string, newStatus: string) => {
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('tickets')
-                .update({ status: newStatus })
-                .eq('id', ticketId);
-
-            if (error) throw error;
+            const res = await updateTicketStatus(ticketId, newStatus);
+            if (!res.success) throw new Error('Failed to update status');
 
             setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: newStatus as TicketType['status'] } : t));
             if (selectedTicket) {
@@ -179,15 +122,11 @@ export default function ClosedTicketsPage() {
         }
     };
 
-    const updateTicketPriority = async (ticketId: string, newPriority: string) => {
+    const handleUpdateTicketPriority = async (ticketId: string, newPriority: string) => {
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('tickets')
-                .update({ priority: newPriority })
-                .eq('id', ticketId);
-
-            if (error) throw error;
+            const res = await updateTicketPriority(ticketId, newPriority);
+            if (!res.success) throw new Error('Failed to update priority');
 
             setTickets(tickets.map(t => t.id === ticketId ? { ...t, priority: newPriority as TicketType['priority'] } : t));
             if (selectedTicket) {
@@ -200,14 +139,18 @@ export default function ClosedTicketsPage() {
         }
     };
 
+    const handleLogout = async () => {
+        await signOut();
+        localStorage.removeItem('adminAuth');
+        router.push('/admin/login');
+    };
+
     const getStatusIcon = (status: string) => {
         switch (status) {
             case 'OPEN':
                 return <AlertCircle size={20} color="#ff5555" />;
             case 'IN_PROGRESS':
                 return <Clock size={20} color="#ffb86c" />;
-            case 'RESOLVED':
-                return <CheckCircle size={20} color="#50fa7b" />;
             case 'CLOSED':
                 return <XCircleIcon size={20} color="#6272a4" />;
             default:
@@ -268,10 +211,7 @@ export default function ClosedTicketsPage() {
 
                 <div className={styles.logoutWrapper}>
                     <button
-                        onClick={() => {
-                            localStorage.removeItem('adminAuth');
-                            router.push('/admin/login');
-                        }}
+                        onClick={handleLogout}
                         className={styles.navItem}
                     >
                         <Settings size={18} /> Logout
@@ -495,7 +435,7 @@ export default function ClosedTicketsPage() {
                                     <div style={{ marginBottom: '1rem' }}>
                                         <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Status</label>
                                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                            {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(status => (
+                                            {['OPEN', 'IN_PROGRESS', 'CLOSED'].map(status => (
                                                 <button
                                                     key={status}
                                                     onClick={() => updateTicketStatus(selectedTicket.id, status)}
@@ -708,27 +648,7 @@ export default function ClosedTicketsPage() {
 
                                         setUpdating(true);
                                         try {
-                                            const { error } = await supabase
-                                                .from('tickets')
-                                                .update({
-                                                    admin_notes: adminNotes.trim() || null,
-                                                    status: selectedTicket.status,
-                                                    priority: selectedTicket.priority,
-                                                    updated_at: new Date().toISOString()
-                                                })
-                                                .eq('id', selectedTicket.id);
-
-                                            if (error) throw error;
-
-                                            // Update local state
-                                            setTickets(tickets.map(t =>
-                                                t.id === selectedTicket.id
-                                                    ? { ...selectedTicket, admin_notes: adminNotes.trim() || undefined }
-                                                    : t
-                                            ));
-
-                                            // setToast({ message: 'Changes saved successfully!', type: 'success' });
-                                            // setTimeout(() => setToast(null), 3000);
+                                            await updateTicketStatus(selectedTicket.id, selectedTicket.status);
 
                                             setShowSuccess(true);
                                             setTimeout(() => {

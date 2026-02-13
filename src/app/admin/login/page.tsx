@@ -2,12 +2,14 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { signIn, signUp } from '@/lib/actions/auth';
 import { Lock, User, LogIn, Shield, Eye, EyeOff } from 'lucide-react';
 
 export default function AdminLogin() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('Admin User');
+    const [username, setUsername] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSignUp, setIsSignUp] = useState(false);
@@ -21,30 +23,15 @@ export default function AdminLogin() {
 
         try {
             if (isSignUp) {
-                const { data, error: authError } = await supabase.auth.signUp({
-                    email,
-                    password,
-                });
-                if (authError) throw authError;
-
-                if (data.user) {
-                    await supabase.from('profiles').upsert([{
-                        id: data.user.id,
-                        full_name: 'Admin User',
-                        role: 'ADMIN'
-                    }]);
-                }
+                const res = await signUp(email, password, fullName, username || email.split('@')[0], 'USER');
+                if (!res.success) throw new Error(res.error);
 
                 setError('Account created! Now log in.');
                 setIsSignUp(false);
                 setLoading(false);
             } else {
-                const { error: authError } = await supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                });
-
-                if (authError) throw authError;
+                const res = await signIn(email, password);
+                if (!res.success) throw new Error(res.error);
 
                 localStorage.setItem('adminAuth', 'true');
                 router.push('/dashboard');
@@ -97,6 +84,55 @@ export default function AdminLogin() {
                 </div>
 
                 <form onSubmit={handleSubmit}>
+                    {isSignUp && (
+                        <>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#334155', marginBottom: '0.5rem' }}>
+                                    Full Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="John Doe"
+                                    required
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.95rem',
+                                        outline: 'none',
+                                        background: '#fff',
+                                        color: '#0f172a'
+                                    }}
+                                />
+                            </div>
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#334155', marginBottom: '0.5rem' }}>
+                                    Username
+                                </label>
+                                <input
+                                    type="text"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    placeholder="johndoe"
+                                    required
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.75rem 1rem',
+                                        borderRadius: '8px',
+                                        border: '1px solid #cbd5e1',
+                                        fontSize: '0.95rem',
+                                        outline: 'none',
+                                        background: '#fff',
+                                        color: '#0f172a'
+                                    }}
+                                />
+                            </div>
+                        </>
+                    )}
+
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#334155', marginBottom: '0.5rem' }}>
                             Email Address

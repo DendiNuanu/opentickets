@@ -9,7 +9,24 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import Button from '@/components/Button';
 import Card from '@/components/Card';
-import { supabase } from '@/lib/supabase';
+import {
+    getCurrentUser,
+    signOut,
+    getAllUsers,
+    signUp as createUserAction,
+    updateUser,
+    deleteUser
+} from '@/lib/actions/auth';
+import {
+    getTickets,
+    updateTicketStatus,
+    updateTicketPriority,
+    getNotifications,
+    markAllAsRead,
+    getComments,
+    createComment,
+    updateTicket
+} from '@/lib/actions/tickets';
 import { type Ticket as TicketType, type Notification as NotificationType } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -18,7 +35,7 @@ import styles from './dashboard.module.css';
 export default function Dashboard() {
     const router = useRouter();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [filter, setFilter] = useState<'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'DONE' | 'USERS'>('OPEN');
+    const [filter, setFilter] = useState<'OPEN' | 'IN_PROGRESS' | 'DONE' | 'USERS'>('OPEN');
 
     const [tickets, setTickets] = useState<TicketType[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,21 +79,13 @@ export default function Dashboard() {
                 return;
             }
 
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
+            const profile = await getCurrentUser();
+            if (!profile) {
                 router.push('/admin/login');
                 return;
             }
 
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('id, full_name, role')
-                .eq('id', user.id)
-                .single();
-
-            if (profile) {
-                setUserProfile(profile);
-            }
+            setUserProfile(profile);
             setIsAuthenticated(true);
         };
 
@@ -85,43 +94,32 @@ export default function Dashboard() {
 
     useEffect(() => {
         if (!isAuthenticated) return;
-        fetchTickets();
+
+        if (filter === 'USERS') {
+            fetchUsers();
+        } else {
+            handleFetchTickets();
+        }
+
         fetchNotifications();
 
-        // Subscription for new notifications
-        const notificationChannel = supabase
-            .channel('public:notifications')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, async (payload) => {
-                const newNotif = payload.new as NotificationType;
+        // Real-time PostgreSQL subscription is removed for vanilla Postgres
+        // In a production app, you might use polling or a dedicated WebSocket server
+        const interval = setInterval(() => {
+            fetchNotifications();
+            if (filter === 'OPEN') {
+                handleFetchTickets();
+            } else if (filter === 'USERS') {
+                fetchUsers();
+            }
+        }, 30000); // Poll every 30 seconds as fallback
 
-                setNotifications(prev => [newNotif, ...prev]);
-                setUnreadCount(prev => prev + 1);
-
-                // Also refresh tickets if we're on the open filter
-                if (filter === 'OPEN') {
-                    fetchTickets();
-                }
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(notificationChannel);
-        };
+        return () => clearInterval(interval);
     }, [filter, isAuthenticated, userProfile]);
 
     const fetchNotifications = async () => {
         try {
-            if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) {
-                return; // Silent skip in demo mode
-            }
-
-            const { data, error } = await supabase
-                .from('notifications')
-                .select('*')
-                .order('created_at', { ascending: false })
-                .limit(10);
-
-            if (error) throw error;
+            const data = await getNotifications();
             setNotifications(data as NotificationType[] || []);
             setUnreadCount((data as NotificationType[])?.filter(n => !n.is_read).length || 0);
         } catch (err) {
@@ -129,14 +127,9 @@ export default function Dashboard() {
         }
     };
 
-    const markAllAsRead = async () => {
+    const handleMarkAllAsRead = async () => {
         try {
-            const { error } = await supabase
-                .from('notifications')
-                .update({ is_read: true })
-                .eq('is_read', false);
-
-            if (error) throw error;
+            await markAllAsRead();
             setNotifications(notifications.map(n => ({ ...n, is_read: true })));
             setUnreadCount(0);
         } catch (err) {
@@ -153,16 +146,7 @@ export default function Dashboard() {
 
     const fetchComments = async (ticketId: string) => {
         try {
-            const { data, error } = await supabase
-                .from('messages')
-                .select(`
-                    *,
-                    profiles:user_id (full_name, role)
-                `)
-                .eq('ticket_id', ticketId)
-                .order('created_at', { ascending: true });
-
-            if (error) throw error;
+            const data = await getComments(ticketId);
             setComments(data || []);
         } catch (err) {
             console.error('Error fetching comments:', err);
@@ -170,60 +154,15 @@ export default function Dashboard() {
     };
 
     const addComment = async () => {
-        if ((!commentText.trim() && !attachment) || !selectedTicket) return;
+        if (!commentText.trim() || !selectedTicket) return;
 
         setIsUploading(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const res = await createComment(selectedTicket.id, commentText.trim(), userProfile?.id);
 
-            let attachmentUrl = null;
-            let attachmentType = null;
-
-            if (attachment) {
-                const fileExt = attachment.name.split('.').pop();
-                const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-                const filePath = `ticket-attachments/${fileName}`;
-
-                const { error: uploadError } = await supabase.storage
-                    .from('ticket-attachments')
-                    .upload(filePath, attachment);
-
-                if (uploadError) throw uploadError;
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('ticket-attachments')
-                    .getPublicUrl(filePath);
-
-                attachmentUrl = publicUrl;
-                attachmentType = attachment.type.startsWith('image/') ? 'image' : 'video';
-            }
-
-            // Fallback: Append attachment info to content to avoid schema dependency
-            let finalContent = commentText.trim();
-            if (attachmentUrl) {
-                finalContent += `\n\n:::attachment|${attachmentType}|${attachmentUrl}:::`;
-            }
-
-            const payload: any = {
-                ticket_id: selectedTicket.id,
-                content: finalContent,
-                user_id: user?.id
-            };
-
-            // We do NOT send attachment_url/type to DB to avoid "column not found" error
-            // if (attachmentUrl) {
-            //    payload.attachment_url = attachmentUrl;
-            //    payload.attachment_type = attachmentType;
-            // }
-
-            const { error } = await supabase
-                .from('messages')
-                .insert([payload]);
-
-            if (error) throw error;
+            if (!res.success) throw new Error('Failed to add comment');
 
             setCommentText('');
-            setAttachment(null);
             fetchComments(selectedTicket.id);
         } catch (err: any) {
             console.error('Error adding comment:', err);
@@ -236,10 +175,7 @@ export default function Dashboard() {
 
     const fetchUsers = async () => {
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*');
-            if (error) throw error;
+            const data = await getAllUsers();
             setUsers(data || []);
         } catch (err) {
             console.error('Error fetching users:', err);
@@ -250,27 +186,15 @@ export default function Dashboard() {
         e.preventDefault();
         setUpdating(true);
         try {
-            // 1. Sign up the user in Supabase Auth
-            const { data: authData, error: authError } = await supabase.auth.signUp({
-                email: newUserData.email,
-                password: newUserData.password,
-            });
+            const res = await createUserAction(
+                newUserData.email,
+                newUserData.password,
+                newUserData.fullName,
+                newUserData.username,
+                newUserData.role
+            );
 
-            if (authError) throw authError;
-            if (!authData.user) throw new Error('Failed to create user');
-
-            // 2. Insert the profile record
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .insert([{
-                    id: authData.user.id,
-                    full_name: newUserData.fullName,
-                    username: newUserData.username,
-                    role: newUserData.role,
-                    updated_at: new Date().toISOString()
-                }]);
-
-            if (profileError) throw profileError;
+            if (!res.success) throw new Error(res.error);
 
             setToast({ message: 'User created successfully!', type: 'success' });
             setShowAddUserModal(false);
@@ -289,16 +213,12 @@ export default function Dashboard() {
         if (!editingUser) return;
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({
-                    full_name: editingUser.full_name,
-                    role: editingUser.role,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', editingUser.id);
+            const res = await updateUser(editingUser.id, {
+                fullName: editingUser.full_name,
+                role: editingUser.role
+            });
 
-            if (error) throw error;
+            if (!res.success) throw new Error(res.error);
 
             setToast({ message: 'User updated successfully!', type: 'success' });
             setShowEditUserModal(false);
@@ -315,12 +235,8 @@ export default function Dashboard() {
     const handleDeleteUser = async (userId: string) => {
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('profiles')
-                .delete()
-                .eq('id', userId);
-
-            if (error) throw error;
+            const res = await deleteUser(userId);
+            if (!res.success) throw new Error(res.error);
 
             setToast({ message: 'User deleted successfully!', type: 'success' });
             setConfirmDeleteModal({ show: false, userId: '', userName: '' });
@@ -333,43 +249,17 @@ export default function Dashboard() {
         }
     };
 
-    useEffect(() => {
-        if (filter === 'USERS') {
-            if (userProfile?.role === 'ADMIN') {
-                fetchUsers();
-            } else if (userProfile) {
-                setFilter('OPEN');
-            }
-        }
-    }, [filter, userProfile]);
+    const handleLogout = async () => {
+        await signOut();
+        localStorage.removeItem('adminAuth');
+        router.push('/admin/login');
+    };
 
-    const fetchTickets = async () => {
+    const handleFetchTickets = async () => {
         setLoading(true);
         try {
-            if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')) {
-                console.warn("Supabase keys missing, running in demo mode");
-                setTickets([]);
-            } else {
-                let query = supabase
-                    .from('tickets')
-                    .select('*');
-
-                if (filter === 'DONE') {
-                    query = query.eq('status', 'CLOSED');
-                } else if (filter !== 'USERS') {
-                    query = query.eq('status', filter);
-                }
-
-                // Role-based filtering: Users only see their own tickets
-                if (userProfile?.role === 'USER') {
-                    query = query.eq('driver_id', userProfile.id);
-                }
-
-                const { data, error } = await query.order('created_at', { ascending: false });
-
-                if (error) throw error;
-                setTickets(data as TicketType[] || []);
-            }
+            const data = await getTickets(filter, userProfile?.role === 'USER' ? userProfile.id : undefined);
+            setTickets(data as TicketType[] || []);
         } catch (err) {
             console.error('Error fetching tickets:', err);
         } finally {
@@ -377,15 +267,16 @@ export default function Dashboard() {
         }
     };
 
-    const updateTicketStatus = async (ticketId: string, newStatus: string) => {
+    // Replace references to fetchTickets with handleFetchTickets
+    useEffect(() => {
+        if (isAuthenticated) handleFetchTickets();
+    }, [filter, isAuthenticated, userProfile]);
+
+    const handleUpdateTicketStatus = async (ticketId: string, newStatus: string) => {
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('tickets')
-                .update({ status: newStatus })
-                .eq('id', ticketId);
-
-            if (error) throw error;
+            const res = await updateTicketStatus(ticketId, newStatus);
+            if (!res.success) throw new Error('Failed to update status');
 
             setTickets(tickets.map(t => t.id === ticketId ? { ...t, status: newStatus as TicketType['status'] } : t));
             if (selectedTicket) {
@@ -398,15 +289,11 @@ export default function Dashboard() {
         }
     };
 
-    const updateTicketPriority = async (ticketId: string, newPriority: string) => {
+    const handleUpdateTicketPriority = async (ticketId: string, newPriority: string) => {
         setUpdating(true);
         try {
-            const { error } = await supabase
-                .from('tickets')
-                .update({ priority: newPriority })
-                .eq('id', ticketId);
-
-            if (error) throw error;
+            const res = await updateTicketPriority(ticketId, newPriority);
+            if (!res.success) throw new Error('Failed to update priority');
 
             setTickets(tickets.map(t => t.id === ticketId ? { ...t, priority: newPriority as TicketType['priority'] } : t));
             if (selectedTicket) {
@@ -425,8 +312,6 @@ export default function Dashboard() {
                 return <AlertCircle size={20} color="#ff5555" />;
             case 'IN_PROGRESS':
                 return <Clock size={20} color="#ffb86c" />;
-            case 'RESOLVED':
-                return <CheckCircle size={20} color="#50fa7b" />;
             case 'CLOSED':
                 return <XCircleIcon size={20} color="#6272a4" />;
             default:
@@ -499,10 +384,7 @@ export default function Dashboard() {
 
                 <div className={styles.logoutWrapper}>
                     <button
-                        onClick={() => {
-                            localStorage.removeItem('adminAuth');
-                            router.push('/admin/login');
-                        }}
+                        onClick={handleLogout}
                         className={styles.navItem}
                     >
                         <Settings size={18} /> Logout
@@ -633,7 +515,7 @@ export default function Dashboard() {
 
                 {/* Filter Tabs */}
                 <div className={styles.tabs}>
-                    {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'DONE', 'USERS'].map((f) => {
+                    {['OPEN', 'IN_PROGRESS', 'DONE', 'USERS'].map((f) => {
                         if (f === 'USERS' && userProfile?.role !== 'ADMIN') return null;
                         return (
                             <button
@@ -1353,10 +1235,10 @@ export default function Dashboard() {
                                         <div style={{ marginBottom: '1rem' }}>
                                             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.5rem' }}>Update Status</label>
                                             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(status => (
+                                                {['OPEN', 'IN_PROGRESS', 'CLOSED'].map(status => (
                                                     <button
                                                         key={status}
-                                                        onClick={() => updateTicketStatus(selectedTicket.id, status)}
+                                                        onClick={() => handleUpdateTicketStatus(selectedTicket.id, status)}
                                                         disabled={updating || selectedTicket.status === status}
                                                         style={{
                                                             padding: '0.5rem 1rem',
@@ -1383,7 +1265,7 @@ export default function Dashboard() {
                                                 {['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'].map(priority => (
                                                     <button
                                                         key={priority}
-                                                        onClick={() => updateTicketPriority(selectedTicket.id, priority)}
+                                                        onClick={() => handleUpdateTicketPriority(selectedTicket.id, priority)}
                                                         disabled={updating || selectedTicket.priority === priority}
                                                         style={{
                                                             padding: '0.5rem 1rem',
@@ -1542,19 +1424,13 @@ export default function Dashboard() {
 
                                             setUpdating(true);
                                             try {
-                                                // The individual buttons already update Supabase, but let's make sure 
-                                                // the notes and any other changes are fully synced here too.
-                                                const { error } = await supabase
-                                                    .from('tickets')
-                                                    .update({
-                                                        admin_notes: adminNotes.trim() || null,
-                                                        status: selectedTicket.status,
-                                                        priority: selectedTicket.priority,
-                                                        updated_at: new Date().toISOString()
-                                                    })
-                                                    .eq('id', selectedTicket.id);
+                                                const res = await updateTicket(selectedTicket.id, {
+                                                    admin_notes: adminNotes.trim() || null,
+                                                    status: selectedTicket.status,
+                                                    priority: selectedTicket.priority
+                                                });
 
-                                                if (error) throw error;
+                                                if (!res.success) throw new Error('Failed to update ticket');
 
                                                 // Re-fetch or update local list to ensure consistency
                                                 setTickets(tickets.map(t =>

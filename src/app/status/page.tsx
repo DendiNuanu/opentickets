@@ -6,7 +6,7 @@ import { Ticket, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import ThemeToggle from '@/components/ThemeToggle';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
-import { supabase } from '@/lib/supabase';
+import { getTickets } from '@/lib/actions/tickets';
 import { type Ticket as TicketType } from '@/lib/types';
 
 export default function StatusPage() {
@@ -14,26 +14,15 @@ export default function StatusPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchAllTickets();
+        handleFetchAllTickets();
     }, []);
 
-    const fetchAllTickets = async () => {
+    const handleFetchAllTickets = async () => {
         setLoading(true);
 
         try {
-            if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-                // Demo mode
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                setTickets([]);
-            } else {
-                const { data, error } = await supabase
-                    .from('tickets')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
-                setTickets(data as TicketType[] || []);
-            }
+            const data = await getTickets(); // default is all tickets ordered by created_at desc
+            setTickets(data as TicketType[] || []);
         } catch (err) {
             console.error('Error fetching tickets:', err);
         } finally {
@@ -47,8 +36,6 @@ export default function StatusPage() {
                 return <AlertCircle size={20} color="#ff5555" />;
             case 'IN_PROGRESS':
                 return <Clock size={20} color="#f1fa8c" />;
-            case 'RESOLVED':
-                return <CheckCircle size={20} color="#50fa7b" />;
             case 'CLOSED':
                 return <XCircle size={20} color="#6272a4" />;
             default:
@@ -118,7 +105,7 @@ export default function StatusPage() {
                                     {tickets.length > 0 ? `${tickets.length} Total Ticket${tickets.length > 1 ? 's' : ''}` : 'No Tickets Yet'}
                                 </h2>
                                 <motion.button
-                                    onClick={fetchAllTickets}
+                                    onClick={handleFetchAllTickets}
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
                                     style={{

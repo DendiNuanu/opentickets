@@ -9,7 +9,8 @@ import {
 import ThemeToggle from '@/components/ThemeToggle';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
-import { supabase } from '@/lib/supabase';
+import { createTicket } from '@/lib/actions/tickets';
+// Supabase import removed
 
 // Animation Variants
 const fadeIn = {
@@ -49,64 +50,29 @@ export default function Home() {
   const handleNext = () => setStep((prev) => prev + 1);
   const handleBack = () => setStep((prev) => prev - 1);
 
+
+
+  // ... (inside Home component)
   const handleSubmit = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-        // Fallback for demo if no ENV set
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        console.warn("Supabase keys missing, running in demo mode");
-      } else {
-        let imageUrl = '';
-        if (formData.imageFile) {
-          const file = formData.imageFile;
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-          const filePath = `attachments/${fileName}`;
+      // Image upload is skipped for now in PostgreSQL migration
+      // In a real app, you'd use a cloud storage provider or a custom upload endpoint
+      const imageUrl = '';
 
-          const { error: uploadError, data: uploadData } = await supabase.storage
-            .from('ticket-attachments')
-            .upload(filePath, file);
+      const res = await createTicket({
+        topic: topics.find(t => t.id === formData.topic)?.label || formData.topic,
+        title: formData.subject,
+        description: `Serial Number: ${formData.serialNumber}\n\n${formData.description}`,
+        contact_email: formData.email,
+        contact_phone: formData.phoneNumber,
+        priority: 'MEDIUM',
+        image_url: imageUrl || undefined
+      });
 
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('ticket-attachments')
-            .getPublicUrl(filePath);
-
-          imageUrl = publicUrl;
-        }
-
-        const { data: ticketData, error: insertError } = await supabase
-          .from('tickets')
-          .insert([
-            {
-              topic: topics.find(t => t.id === formData.topic)?.label || formData.topic,
-              title: formData.subject,
-              description: `Serial Number: ${formData.serialNumber}\n\n${formData.description}`,
-              contact_email: formData.email,
-              contact_phone: formData.phoneNumber,
-              status: 'OPEN',
-              priority: 'MEDIUM',
-              image_url: imageUrl || null
-            }
-          ])
-          .select()
-          .single();
-
-        if (insertError) throw insertError;
-
-        // Create a notification for the new ticket
-        if (ticketData) {
-          await supabase.from('notifications').insert([{
-            ticket_id: ticketData.id,
-            title: 'New Ticket Received',
-            content: `Subject: ${ticketData.title}`,
-          }]);
-        }
-      }
+      if (!res.success) throw new Error(res.error);
 
       setStep(4);
     } catch (err: any) {

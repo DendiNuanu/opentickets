@@ -280,10 +280,6 @@
     color: #ffb86c;
 }
 
-.statusRESOLVED {
-    background: rgba(80, 250, 123, 0.2);
-    color: #50fa7b;
-}
 
 .statusCLOSED {
     background: rgba(98, 114, 164, 0.2);

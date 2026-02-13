@@ -1,4 +1,4 @@
-export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | 'RESOLVED';
+export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'CLOSED';
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Ticket {
