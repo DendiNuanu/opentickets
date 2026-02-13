@@ -58,7 +58,9 @@ CREATE TABLE IF NOT EXISTS messages (
   ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE NOT NULL,
   user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-  content TEXT NOT NULL
+  content TEXT NOT NULL,
+  attachment_url TEXT,
+  attachment_type TEXT
 );
 
 -- Create a table for notifications

@@ -42,6 +42,7 @@ export async function createTicket(data: {
     priority?: string;
     image_url?: string;
 }) {
+    console.log('ACTION: createTicket called with image_url:', data.image_url || 'UNDEFINED');
     try {
         const sql = `
       INSERT INTO tickets (title, description, topic, contact_email, contact_phone, driver_id, priority, image_url)
@@ -124,17 +125,21 @@ export async function getComments(ticketId: string) {
     }
 }
 
-export async function createComment(ticketId: string, content: string, userId?: string) {
+export async function createComment(ticketId: string, content: string, userId?: string, attachmentUrl?: string, attachmentType?: string) {
     try {
         const result = await query(
-            'INSERT INTO messages (ticket_id, content, user_id) VALUES ($1, $2, $3) RETURNING *',
-            [ticketId, content, userId]
+            'INSERT INTO messages (ticket_id, content, user_id, attachment_url, attachment_type) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [ticketId, content, userId, attachmentUrl, attachmentType]
         );
         revalidatePath('/dashboard');
         return { success: true, comment: result.rows[0] };
-    } catch (error) {
+    } catch (error: any) {
         console.error('Error creating comment:', error);
-        return { success: false };
+        return {
+            success: false,
+            error: error.message || 'Unknown database error',
+            detail: error.detail || null
+        };
     }
 }
 

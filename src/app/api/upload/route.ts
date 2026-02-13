@@ -8,6 +8,8 @@ export async function POST(request: NextRequest) {
         const formData = await request.formData();
         const file = formData.get('file') as File | null;
 
+        console.log('API UPLOAD: Received request, file:', file ? `${file.name} (${file.size} bytes)` : 'NULL');
+
         if (!file) {
             return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
         }
@@ -27,6 +29,7 @@ export async function POST(request: NextRequest) {
         await writeFile(path, buffer);
 
         const url = `/uploads/${filename}`;
+        console.log('API UPLOAD: Success, saved to:', path, 'URL:', url);
 
         return NextResponse.json({ success: true, url });
     } catch (error) {

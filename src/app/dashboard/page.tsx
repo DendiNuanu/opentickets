@@ -154,20 +154,66 @@ export default function Dashboard() {
     };
 
     const addComment = async () => {
-        if (!commentText.trim() || !selectedTicket) return;
+        if (!selectedTicket) return;
+        if (!commentText.trim() && !attachment) {
+            setToast({ message: 'Please enter a message or attach a file', type: 'error' });
+            setTimeout(() => setToast(null), 3000);
+            return;
+        }
 
         setIsUploading(true);
+        console.log('addComment: Starting...', { text: commentText, hasAttachment: !!attachment });
+
         try {
-            const res = await createComment(selectedTicket.id, commentText.trim(), userProfile?.id);
+            let attachmentUrl = '';
+            let attachmentType = '';
 
-            if (!res.success) throw new Error('Failed to add comment');
+            if (attachment) {
+                console.log('addComment: Uploading file:', attachment.name);
+                const formData = new FormData();
+                formData.append('file', attachment);
 
+                const uploadRes = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!uploadRes.ok) {
+                    const errorText = await uploadRes.text();
+                    throw new Error(`Upload failed: ${uploadRes.status} ${errorText}`);
+                }
+
+                const uploadData = await uploadRes.json();
+                attachmentUrl = uploadData.url;
+                attachmentType = attachment.type.startsWith('video/') ? 'video' : 'image';
+                console.log('addComment: Upload success:', attachmentUrl);
+            }
+
+            console.log('addComment: Creating database entry...');
+            const res = await createComment(
+                selectedTicket.id,
+                commentText.trim(),
+                userProfile?.id,
+                attachmentUrl || undefined,
+                attachmentType || undefined
+            );
+
+            if (!res.success) {
+                const errorDetail = (res as any).error || 'Failed to save comment to database';
+                const errorHint = (res as any).detail ? ` (${(res as any).detail})` : '';
+                throw new Error(`${errorDetail}${errorHint}`);
+            }
+
+            console.log('addComment: Success!');
             setCommentText('');
+            setAttachment(null);
             fetchComments(selectedTicket.id);
-        } catch (err: any) {
-            console.error('Error adding comment:', err);
-            setToast({ message: `Failed to add comment: ${err.message || 'Unknown error'}`, type: 'error' });
+            setToast({ message: 'Comment added successfully', type: 'success' });
             setTimeout(() => setToast(null), 3000);
+        } catch (err: any) {
+            console.error('CRITICAL ERROR in addComment:', err);
+            setToast({ message: `Bug Detected: ${err.message || 'Unknown error'}`, type: 'error' });
+            setTimeout(() => setToast(null), 5000);
         } finally {
             setIsUploading(false);
         }
@@ -1299,14 +1345,38 @@ export default function Dashboard() {
                                                         const attachmentUrl = msg.attachment_url || (attachmentMatch ? attachmentMatch[2] : null);
 
                                                         return (
-                                                            <div key={msg.id} style={{ background: msg.profiles?.role === 'ADMIN' ? 'rgba(79, 70, 229, 0.1)' : 'var(--bg-secondary)', padding: '1rem', borderRadius: '12px', borderBottomLeftRadius: msg.profiles?.role === 'ADMIN' ? '12px' : '4px', borderBottomRightRadius: msg.profiles?.role === 'ADMIN' ? '4px' : '12px' }}>
-                                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                                                                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: msg.profiles?.role === 'ADMIN' ? 'var(--accent-color)' : 'var(--text-primary)' }}>
-                                                                        {msg.profiles?.full_name || 'User'}
-                                                                        {msg.profiles?.role === 'ADMIN' && <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.4rem', background: 'var(--accent-color)', color: '#fff', borderRadius: '4px', marginLeft: '0.5rem' }}>ADMIN</span>}
-                                                                    </span>
-                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                                                        {new Date(msg.created_at).toLocaleString()}
+                                                            <div key={msg.id} style={{
+                                                                background: msg.role === 'ADMIN' ? 'rgba(79, 70, 229, 0.08)' : 'var(--bg-secondary)',
+                                                                padding: '1rem',
+                                                                borderRadius: '16px',
+                                                                border: msg.role === 'ADMIN' ? '1px solid rgba(79, 70, 229, 0.2)' : '1px solid transparent',
+                                                                borderBottomLeftRadius: msg.role === 'ADMIN' ? '16px' : '4px',
+                                                                borderBottomRightRadius: msg.role === 'ADMIN' ? '4px' : '16px',
+                                                                boxShadow: msg.role === 'ADMIN' ? '0 4px 12px rgba(79, 70, 229, 0.1)' : 'none',
+                                                                transition: 'all 0.2s ease'
+                                                            }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'center' }}>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: msg.role === 'ADMIN' ? 'var(--accent-color)' : 'var(--text-primary)' }}>
+                                                                            {msg.full_name || 'User'}
+                                                                        </span>
+                                                                        {msg.role === 'ADMIN' && (
+                                                                            <span style={{
+                                                                                fontSize: '0.7rem',
+                                                                                padding: '2px 8px',
+                                                                                background: 'var(--accent-color)',
+                                                                                color: '#fff',
+                                                                                borderRadius: '6px',
+                                                                                fontWeight: 800,
+                                                                                textTransform: 'uppercase',
+                                                                                letterSpacing: '0.5px'
+                                                                            }}>
+                                                                                Super Admin
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                                        {new Date(msg.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                                                                     </span>
                                                                 </div>
                                                                 <div style={{ color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>{cleanContent}</div>

@@ -99,7 +99,9 @@ create table if not exists messages (
   ticket_id uuid references tickets not null,
   user_id uuid references profiles, -- Link to profiles for easier joins
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  content text not null
+  content text not null,
+  attachment_url text,
+  attachment_type text
 );
 
 -- Ensure user_id references profiles if it exists

@@ -52,15 +52,16 @@ export default function Home() {
 
 
 
-  // ... (inside Home component)
   const handleSubmit = async () => {
     setLoading(true);
     setError(null);
+    console.log('SUBMIT: Form data at start:', { ...formData, topic: formData.topic, subject: formData.subject, description: formData.description, serialNumber: formData.serialNumber, email: formData.email, phoneNumber: formData.phoneNumber, imageFile: formData.imageFile ? `${formData.imageFile.name} (${formData.imageFile.size} bytes)` : 'NULL' });
 
     try {
       let imageUrl = '';
 
       if (formData.imageFile) {
+        console.log('SUBMIT: Attempting to upload image...');
         const uploadData = new FormData();
         uploadData.append('file', formData.imageFile);
 
@@ -69,13 +70,20 @@ export default function Home() {
           body: uploadData,
         });
 
-        if (!uploadRes.ok) throw new Error('Failed to upload image');
+        if (!uploadRes.ok) {
+          const errorData = await uploadRes.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('SUBMIT: Upload failed:', errorData);
+          throw new Error('Failed to upload image: ' + (errorData.error || uploadRes.statusText));
+        }
+
         const uploadResult = await uploadRes.json();
         imageUrl = uploadResult.url;
+        console.log('SUBMIT: Upload success, imageUrl:', imageUrl);
       }
 
+      console.log('SUBMIT: Calling createTicket with image_url:', imageUrl || 'NONE');
       const res = await createTicket({
-        topic: topics.find(t => t.id === formData.topic)?.label || formData.topic,
+        topic: topics.find(t => (t as any).id === formData.topic)?.label || formData.topic,
         title: formData.subject,
         description: `Serial Number: ${formData.serialNumber}\n\n${formData.description}`,
         contact_email: formData.email,
